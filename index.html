@@ -13,12 +13,10 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp }
-      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-    const app = initializeApp({
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script>
+    firebase.initializeApp({
       apiKey: "AIzaSyDghKWGnq2zMkKGUs8PheahA35yC-GGqYY",
       authDomain: "caccia-case.firebaseapp.com",
       projectId: "caccia-case",
@@ -26,18 +24,17 @@
       messagingSenderId: "775563837811",
       appId: "1:775563837811:web:8967d71ba7c2698f808506"
     });
-
-    const db  = getFirestore(app);
-    const col = collection(db, "annunci");
-
+    const _db  = firebase.firestore();
+    const _col = _db.collection("annunci");
     window.__db = {
-      subscribe: (cb) => onSnapshot(col, snap => {
+      subscribe: (cb) => _col.onSnapshot(snap => {
         cb(snap.docs.map(d => ({...d.data(), _id: d.id})));
       }),
-      add:    (data)     => addDoc(col, {...data, _ts: serverTimestamp()}),
-      update: (id, data) => { const {_id,...rest}=data; return updateDoc(doc(db,"annunci",id), rest); },
-      remove: (id)       => deleteDoc(doc(db,"annunci",id)),
+      add:    (data)     => _col.add({...data, _ts: firebase.firestore.FieldValue.serverTimestamp()}),
+      update: (id, data) => { const {_id,_ts,...rest}=data; return _col.doc(id).update(rest); },
+      remove: (id)       => _col.doc(id).delete(),
     };
+    window.__dbReady = true;
     window.dispatchEvent(new Event("dbReady"));
   </script>
 
