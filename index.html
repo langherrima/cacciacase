@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <meta name="theme-color" content="#1a1a2e"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Caccia Casa"/>
+  <meta name="description" content="Monitor annunci immobiliari Milano"/>
+  <title>Caccia Casa Milano</title>
+
+  <!-- React + Babel via CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+    body{background:#f5f4f1;font-family:'Georgia',serif;color:#1a1a2e;min-height:100vh}
+    input,select,textarea,button{font-family:inherit}
+    select option{color:#1a1a2e;background:#fff}
+    ::-webkit-scrollbar{width:4px}
+    ::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:4px}
+    @media(max-width:500px){
+      .form-grid{grid-template-columns:1fr !important}
+      .form-grid>*{grid-column:span 1 !important}
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useMemo, useEffect, useCallback } = React;
+
+const SOURCES = ["Immobiliare.it","Idealista","Casa.it","Tecnocasa","Gabetti","Engel & Völkers","Privato","Altro"];
+const SRC_COLOR = {
+  "Immobiliare.it":  {bg:"#dbeafe",text:"#1d4ed8"},
+  "Idealista":       {bg:"#fce7f3",text:"#be185d"},
+  "Casa.it":         {bg:"#d1fae5",text:"#065f46"},
+  "Tecnocasa":       {bg:"#fef3c7",text:"#92400e"},
+  "Gabetti":         {bg:"#ede9fe",text:"#5b21b6"},
+  "Engel & Völkers": {bg:"#fee2e2",text:"#991b1b"},
+  "Privato":         {bg:"#f0fdf4",text:"#166534"},
+  "Altro":           {bg:"#f3f4f6",text:"#374151"},
+};
+const COND = {"Ottimo":"#16a34a","Buono":"#b45309","Da ristrutturare":"#dc2626"};
+const ZONE = [
+  "Navigli","Isola / Garibaldi","Città Studi","Greco / Turro","Porta Vittoria",
+  "Porta Venezia","Porta Romana","Cadore","Susa","Lorenteggio","Bicocca",
+  "Fiera / De Angeli","Vigentino","Bande Nere","Centro Storico","Altra zona",
+];
+const SEARCHES = [
+  {nome:"Immobiliare.it", url:"https://www.immobiliare.it/vendita-appartamenti/milano/?prezzoMassimo=470000&superficieMinima=70&superficieMassima=100"},
+  {nome:"Idealista",      url:"https://www.idealista.it/vendita-case/milano-milano/"},
+  {nome:"Casa.it",        url:"https://www.casa.it/vendita/residenziale/milano/"},
+  {nome:"Tecnocasa",      url:"https://www.tecnocasa.it/vendita/appartamento/lombardia/milano.html"},
+  {nome:"Gabetti",        url:"https://www.gabetti.it/vendita/appartamento/milano"},
+];
+const SOCIALS = [
+  {nome:"@carolachiusano",        piattaforma:"Instagram", follower:"126K", url:"https://www.instagram.com/carolachiusano/",        note:"Milano · Torino · Parigi — la più seguita"},
+  {nome:"@annabuono_",            piattaforma:"Instagram", follower:"30K",  url:"https://www.instagram.com/annabuono_/",            note:"Caseperfette · CityLife · tutta Milano"},
+  {nome:"@jacopotartaglia",       piattaforma:"Instagram", follower:"17K",  url:"https://www.instagram.com/jacopotartaglia/",       note:"Agente immobiliare · mercato e prezzi"},
+  {nome:"@elisabettacasabase",    piattaforma:"Instagram", follower:"—",    url:"https://www.instagram.com/elisabettacasabase/",    note:"Torino · sta aprendo su Milano"},
+  {nome:"RossoMattone",           piattaforma:"Instagram", follower:"—",    url:"https://www.instagram.com/rossomattone.eu/",       note:"Agenzia milanese · property finder"},
+  {nome:"@immobiliare.it",        piattaforma:"TikTok",    follower:"22.6K",url:"https://www.tiktok.com/@immobiliare.it",           note:"Profilo ufficiale Immobiliare.it"},
+  {nome:"@gangimmobiliaremilano", piattaforma:"TikTok",    follower:"—",    url:"https://www.tiktok.com/@gangimmobiliaremilano",    note:"Agenzia milanese · tour appartamenti"},
+  {nome:"@gianlucatorre01",       piattaforma:"TikTok",    follower:"—",    url:"https://www.tiktok.com/@gianlucatorre01",          note:"Tour proprietà · Engel & Völkers Milano"},
+  {nome:"@rossomattoneimmobiliare",piattaforma:"TikTok",   follower:"—",    url:"https://www.tiktok.com/@rossomattoneimmobiliare",  note:"RossoMattone su TikTok"},
+];
+const KEY   = "caccia-casa-v1";
+const EMPTY = {titolo:"",zona:"",indirizzo:"",fonte:"Immobiliare.it",prezzo:"",dimensione:"",vani:"",piano:"",condizioni:"Buono",terrazzo:false,box:false,cantina:false,voto:3,note:"",link:""};
+
+const fmt  = p    => p  ? `€ ${Number(p).toLocaleString("it-IT")}` : "—";
+const fmtM = m    => m  ? `${m} m²` : "—";
+const ppm  = (p,m)=> p&&m ? `€ ${Math.round(Number(p)/Number(m)).toLocaleString("it-IT")}/m²` : "";
+
+// ── COMPONENTI UI ────────────────────────────────────────────────────────────
+
+function Badge({fonte}){
+  const sc = SRC_COLOR[fonte]||SRC_COLOR["Altro"];
+  return <span style={{fontSize:11,fontWeight:700,fontFamily:"Arial,sans-serif",padding:"3px 10px",borderRadius:20,background:sc.bg,color:sc.text,display:"inline-block"}}>{fonte}</span>;
+}
+function CondBadge({cond}){
+  const cc = COND[cond]||"#888";
+  return <span style={{fontSize:10,fontFamily:"Arial,sans-serif",border:`1.5px solid ${cc}`,color:cc,borderRadius:4,padding:"2px 7px",fontWeight:700,flexShrink:0}}>{cond}</span>;
+}
+function Chip({children,bg="#f3f4f6",color="#374151"}){
+  return <span style={{fontSize:11,fontFamily:"Arial,sans-serif",background:bg,color,borderRadius:4,padding:"3px 8px",whiteSpace:"nowrap"}}>{children}</span>;
+}
+function Sel({value,onChange,opts}){
+  return (
+    <select value={value} onChange={e=>onChange(e.target.value)}
+      style={{border:"1px solid #d1d5db",borderRadius:7,padding:"7px 10px",fontSize:13,fontFamily:"Arial,sans-serif",background:"#f9fafb",outline:"none",minWidth:80,color:"#1a1a2e"}}>
+      {opts.map(o=>typeof o==="string"
+        ?<option key={o} value={o}>{o}</option>
+        :<option key={o.v} value={o.v}>{o.l}</option>)}
+    </select>
+  );
+}
+function Stat({label,val}){
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:2}}>
+      <div style={{fontSize:9,fontFamily:"Arial,sans-serif",color:"#9ca3af",textTransform:"uppercase",letterSpacing:1}}>{label}</div>
+      <div style={{fontSize:15,fontWeight:700,fontFamily:"Arial,sans-serif",color:"#1a1a2e"}}>{val}</div>
+    </div>
+  );
+}
+function FRow({label,children,span=1}){
+  return (
+    <div style={{gridColumn:`span ${span}`,display:"flex",flexDirection:"column",gap:5}}>
+      <label style={{fontSize:12,fontFamily:"Arial,sans-serif",color:"#6b7280",fontWeight:600}}>{label}</label>
+      {children}
+    </div>
+  );
+}
+const fi = {border:"1px solid #d1d5db",borderRadius:7,padding:"10px 12px",fontSize:15,fontFamily:"Arial,sans-serif",outline:"none",background:"#f9fafb",width:"100%",boxSizing:"border-box",color:"#1a1a2e"};
+const addBtn = {background:"#1a1a2e",color:"#fff",border:"none",borderRadius:8,padding:"10px 18px",fontSize:14,fontWeight:700,fontFamily:"Arial,sans-serif",cursor:"pointer"};
+
+// ── APP ──────────────────────────────────────────────────────────────────────
+
+function App(){
+  const [tab,      setTab]      = useState("ricerche");
+  const [listings, setListings] = useState([]);
+  const [form,     setForm]     = useState(EMPTY);
+  const [editId,   setEditId]   = useState(null);
+  const [confirm,  setConfirm]  = useState(null);
+  const [fZona,    setFZona]    = useState("Tutte");
+  const [fFonte,   setFFonte]   = useState("Tutte");
+  const [fCond,    setFCond]    = useState("Tutte");
+  const [fSort,    setFSort]    = useState("data_desc");
+  const [fQuery,   setFQuery]   = useState("");
+
+  useEffect(()=>{
+    try{ const s=localStorage.getItem(KEY); if(s) setListings(JSON.parse(s)); }catch(_){}
+  },[]);
+
+  const persist = useCallback(ls=>{
+    try{ localStorage.setItem(KEY,JSON.stringify(ls)); }catch(_){}
+  },[]);
+
+  const update = useCallback(ls=>{ setListings(ls); persist(ls); },[persist]);
+
+  const saveForm = ()=>{
+    if(!form.link&&!form.titolo) return;
+    const next = editId!==null
+      ? listings.map(l=>l._id===editId?{...form,_id:editId}:l)
+      : [...listings,{...form,_id:Date.now()}];
+    update(next); setEditId(null); setForm(EMPTY); setTab("annunci");
+  };
+  const startEdit = l=>{ setForm({...l}); setEditId(l._id); setTab("aggiungi"); };
+  const delItem   = id=>{ update(listings.filter(l=>l._id!==id)); setConfirm(null); };
+
+  const filtered = useMemo(()=>{
+    let r = listings.filter(l=>{
+      if(fZona !=="Tutte"&&l.zona      !==fZona)  return false;
+      if(fFonte!=="Tutte"&&l.fonte     !==fFonte) return false;
+      if(fCond !=="Tutte"&&l.condizioni!==fCond)  return false;
+      if(fQuery){
+        const q=fQuery.toLowerCase();
+        if(![l.titolo,l.zona,l.indirizzo,l.note,l.fonte].some(s=>s?.toLowerCase().includes(q))) return false;
+      }
+      return true;
+    });
+    r.sort((a,b)=>{
+      if(fSort==="prezzo_asc")  return (Number(a.prezzo)||Infinity)-(Number(b.prezzo)||Infinity);
+      if(fSort==="prezzo_desc") return (Number(b.prezzo)||0)-(Number(a.prezzo)||0);
+      if(fSort==="mq_desc")     return (Number(b.dimensione)||0)-(Number(a.dimensione)||0);
+      if(fSort==="voto_desc")   return (Number(b.voto)||0)-(Number(a.voto)||0);
+      if(fSort==="ppm")         return (a.prezzo/a.dimensione||Infinity)-(b.prezzo/b.dimensione||Infinity);
+      return b._id-a._id;
+    });
+    return r;
+  },[listings,fZona,fFonte,fCond,fSort,fQuery]);
+
+  const withP  = filtered.filter(l=>Number(l.prezzo)>0);
+  const withPM = filtered.filter(l=>Number(l.prezzo)>0&&Number(l.dimensione)>0);
+  const stats  = {
+    tot:  filtered.length,
+    minP: withP.length  ? Math.min(...withP.map(l=>Number(l.prezzo))) : 0,
+    avgP: withP.length  ? Math.round(withP.reduce((s,l)=>s+Number(l.prezzo),0)/withP.length) : 0,
+    avgPM:withPM.length ? Math.round(withPM.reduce((s,l)=>s+l.prezzo/l.dimensione,0)/withPM.length) : 0,
+  };
+
+  const goAdd = ()=>{ setForm(EMPTY); setEditId(null); setTab("aggiungi"); };
+
+  return (
+    <div style={{minHeight:"100vh",background:"#f5f4f1"}}>
+
+      {/* HEADER */}
+      <div style={{background:"#1a1a2e",padding:"env(safe-area-inset-top, 16px) 18px 0",position:"sticky",top:0,zIndex:100,boxShadow:"0 2px 12px rgba(0,0,0,.35)"}}>
+        <div style={{paddingTop:8,paddingBottom:0}}>
+          <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",color:"#c8a96e",fontFamily:"Arial,sans-serif"}}>🏙 Monitor Immobiliare · Milano</div>
+          <h1 style={{fontSize:26,fontWeight:700,color:"#fff",letterSpacing:-1,margin:"2px 0 10px"}}>Caccia Casa</h1>
+        </div>
+        <nav style={{display:"flex"}}>
+          {[
+            {id:"ricerche",icon:"🔗",label:"Ricerche"},
+            {id:"annunci", icon:"📋",label:`Annunci (${listings.length})`},
+            {id:"aggiungi",icon:editId!==null?"✏️":"＋",label:editId!==null?"Modifica":"Aggiungi"},
+          ].map(t=>(
+            <button key={t.id}
+              onClick={()=>{ if(t.id==="aggiungi"&&editId===null) setForm(EMPTY); setTab(t.id); }}
+              style={{background:"transparent",border:"none",borderBottom:`3px solid ${tab===t.id?"#c8a96e":"transparent"}`,padding:"10px 14px",fontSize:12,fontFamily:"Arial,sans-serif",color:tab===t.id?"#c8a96e":"#9ca3af",cursor:"pointer",display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+              <span style={{fontSize:15}}>{t.icon}</span>{t.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* ── RICERCHE ── */}
+      {tab==="ricerche"&&(
+        <div style={{padding:"20px 16px 40px",maxWidth:760,margin:"0 auto"}}>
+          <p style={{fontSize:14,fontFamily:"Arial,sans-serif",color:"#6b7280",lineHeight:1.7,marginBottom:18}}>
+            Apri le piattaforme già filtrate su Milano. Quando trovi un annuncio, copia il link e aggiungilo in <b>＋ Aggiungi</b>.
+          </p>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))",gap:14}}>
+            {SEARCHES.map(({nome,url})=>{
+              const sc=SRC_COLOR[nome]||SRC_COLOR["Altro"];
+              return (
+                <a key={nome} href={url} target="_blank" rel="noopener noreferrer"
+                   style={{background:"#fff",borderRadius:10,padding:18,borderLeft:`4px solid ${sc.text}`,display:"flex",flexDirection:"column",gap:8,textDecoration:"none",color:"inherit",boxShadow:"0 1px 3px rgba(0,0,0,.06)"}}>
+                  <Badge fonte={nome}/>
+                  <div style={{fontSize:15,fontWeight:700,color:"#1a1a2e"}}>Cerca su {nome}</div>
+                  <div style={{fontSize:11,fontFamily:"Arial,sans-serif",color:"#9ca3af",lineHeight:1.5,wordBreak:"break-all"}}>{url.replace("https://","").slice(0,48)}…</div>
+                  <div style={{background:sc.text,color:"#fff",borderRadius:7,padding:"8px 14px",fontSize:13,fontWeight:700,fontFamily:"Arial,sans-serif",alignSelf:"flex-start",marginTop:4}}>Apri →</div>
+                </a>
+              );
+            })}
+            <div style={{background:"#fff",borderRadius:10,padding:18,borderLeft:"4px solid #d1d5db",display:"flex",flexDirection:"column",gap:8,opacity:.65}}>
+              <div style={{fontSize:15,fontWeight:700,color:"#1a1a2e"}}>🔧 Altra fonte?</div>
+              <div style={{fontSize:12,fontFamily:"Arial,sans-serif",color:"#9ca3af",lineHeight:1.5}}>Aprila nel browser, copia il link dell'annuncio e aggiungilo in ＋ Aggiungi.</div>
+            </div>
+          </div>
+
+          {/* Social profiles */}
+          <div style={{marginTop:28}}>
+            <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",color:"#9ca3af",fontFamily:"Arial,sans-serif",marginBottom:14}}>📱 Profili Social da monitorare</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))",gap:12}}>
+              {SOCIALS.map(({nome,piattaforma,follower,url,note})=>{
+                const isIG = piattaforma==="Instagram";
+                const bg  = isIG ? "#fce7f3" : "#e0e7ff";
+                const col = isIG ? "#be185d"  : "#3730a3";
+                const ico = isIG ? "📸" : "🎵";
+                return (
+                  <a key={nome} href={url} target="_blank" rel="noopener noreferrer"
+                     style={{background:"#fff",borderRadius:10,padding:14,borderLeft:`4px solid ${col}`,display:"flex",flexDirection:"column",gap:6,textDecoration:"none",color:"inherit",boxShadow:"0 1px 3px rgba(0,0,0,.06)"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span style={{fontSize:11,fontWeight:700,fontFamily:"Arial,sans-serif",padding:"2px 8px",borderRadius:20,background:bg,color:col}}>{ico} {piattaforma}</span>
+                      {follower!=="—" && <span style={{fontSize:11,fontFamily:"Arial,sans-serif",color:"#9ca3af",fontWeight:600}}>{follower} follower</span>}
+                    </div>
+                    <div style={{fontSize:14,fontWeight:700,color:"#1a1a2e"}}>{nome}</div>
+                    <div style={{fontSize:11,fontFamily:"Arial,sans-serif",color:"#9ca3af",lineHeight:1.4}}>{note}</div>
+                    <div style={{fontSize:12,fontFamily:"Arial,sans-serif",color:col,fontWeight:700,marginTop:2}}>Apri e attiva 🔔 →</div>
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Istruzione iPhone */}
+          <div style={{marginTop:28,background:"#1a1a2e",borderRadius:12,padding:20,color:"#fff"}}>
+            <div style={{fontSize:13,fontWeight:700,fontFamily:"Arial,sans-serif",marginBottom:8,color:"#c8a96e"}}>📱 Aggiungi alla Home dell'iPhone</div>
+            <div style={{fontSize:13,fontFamily:"Arial,sans-serif",lineHeight:1.8,color:"#d1d5db"}}>
+              1. Apri questa pagina in <b style={{color:"#fff"}}>Safari</b><br/>
+              2. Tocca l'icona <b style={{color:"#fff"}}>Condividi</b> (quadrato con freccia ↑)<br/>
+              3. Scorri e tocca <b style={{color:"#fff"}}>"Aggiungi alla schermata Home"</b><br/>
+              4. Si installa come un'app — icona sul desktop, schermo intero!
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── ANNUNCI ── */}
+      {tab==="annunci"&&(
+        <div style={{padding:"16px 16px 40px",maxWidth:760,margin:"0 auto"}}>
+          {/* filtri */}
+          <div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:12,alignItems:"center"}}>
+            <input style={{...fi,flex:2,minWidth:120,padding:"7px 10px",fontSize:13}} placeholder="🔍 Cerca..." value={fQuery} onChange={e=>setFQuery(e.target.value)}/>
+            <Sel value={fZona}  onChange={setFZona}  opts={["Tutte",...ZONE]}/>
+            <Sel value={fFonte} onChange={setFFonte} opts={["Tutte",...SOURCES]}/>
+            <Sel value={fCond}  onChange={setFCond}  opts={["Tutte",...Object.keys(COND)]}/>
+            <Sel value={fSort}  onChange={setFSort}  opts={[
+              {v:"data_desc",l:"Recenti"},{v:"prezzo_asc",l:"Prezzo ↑"},
+              {v:"prezzo_desc",l:"Prezzo ↓"},{v:"ppm",l:"€/m² ↑"},
+              {v:"voto_desc",l:"Voto ↓"},{v:"mq_desc",l:"m² ↓"},
+            ]}/>
+            <button onClick={goAdd} style={{...addBtn,padding:"7px 16px",fontSize:20,lineHeight:1}}>＋</button>
+          </div>
+
+          {/* stats */}
+          {listings.length>0&&(
+            <div style={{display:"flex",gap:18,background:"#fff",borderRadius:10,padding:"11px 16px",marginBottom:14,border:"1px solid #e5e7eb",flexWrap:"wrap"}}>
+              <Stat label="Filtrati"   val={stats.tot}/>
+              <Stat label="Prezzo min" val={stats.minP?fmt(stats.minP):"—"}/>
+              <Stat label="Media"      val={stats.avgP?fmt(stats.avgP):"—"}/>
+              <Stat label="€/m² medio" val={stats.avgPM?`€ ${stats.avgPM.toLocaleString("it-IT")}/m²`:"—"}/>
+            </div>
+          )}
+
+          {listings.length===0?(
+            <div style={{textAlign:"center",padding:"56px 20px",fontFamily:"Arial,sans-serif",color:"#6b7280"}}>
+              <div style={{fontSize:52,marginBottom:12}}>🏠</div>
+              <div style={{fontSize:18,fontWeight:700,fontFamily:"Georgia,serif",color:"#1a1a2e",marginBottom:10}}>Nessun annuncio ancora</div>
+              <p style={{maxWidth:340,margin:"0 auto 20px",lineHeight:1.6,fontSize:14}}>Vai su Ricerche, apri le piattaforme, trova un appartamento e aggiungilo con il link diretto.</p>
+              <button onClick={goAdd} style={addBtn}>＋ Aggiungi il primo</button>
+            </div>
+          ):filtered.length===0?(
+            <div style={{textAlign:"center",padding:"40px 20px",fontFamily:"Arial,sans-serif",color:"#6b7280"}}>
+              <div style={{fontSize:36}}>🔎</div>
+              <div style={{fontSize:17,fontWeight:700,color:"#1a1a2e",margin:"10px 0 6px"}}>Nessun risultato</div>
+              <div style={{fontSize:13}}>Prova ad allargare i filtri.</div>
+            </div>
+          ):(
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:14}}>
+              {filtered.map(l=>{
+                const cc=COND[l.condizioni]||"#888";
+                return (
+                  <div key={l._id} style={{background:"#fff",borderRadius:12,padding:16,border:"1px solid #e5e7eb",display:"flex",flexDirection:"column",gap:9,boxShadow:"0 1px 4px rgba(0,0,0,.05)"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:6}}>
+                      <Badge fonte={l.fonte}/>
+                      <CondBadge cond={l.condizioni}/>
+                    </div>
+                    <div style={{fontSize:14,fontWeight:600,lineHeight:1.4,color:"#1a1a2e"}}>{l.titolo||<em style={{color:"#9ca3af",fontWeight:400}}>Senza titolo</em>}</div>
+                    {(l.zona||l.indirizzo)&&(
+                      <div style={{fontSize:12,fontFamily:"Arial,sans-serif",color:"#6b7280"}}>
+                        📍 <b>{l.zona}</b>{l.indirizzo&&<span style={{color:"#9ca3af"}}> · {l.indirizzo}</span>}
+                      </div>
+                    )}
+                    <div style={{display:"flex",background:"#f8f7f4",borderRadius:8,border:"1px solid #e5e7eb",overflow:"hidden"}}>
+                      {[{v:fmt(l.prezzo),k:"Prezzo"},{v:fmtM(l.dimensione),k:"Superficie"},{v:l.vani?`${l.vani} vani`:"—",k:"Locali"}].map((s,j)=>(
+                        <div key={j} style={{flex:1,padding:"8px 4px",textAlign:"center",borderLeft:j?"1px solid #e5e7eb":"none"}}>
+                          <div style={{fontSize:12,fontWeight:700,fontFamily:"Arial,sans-serif",color:"#1a1a2e"}}>{s.v}</div>
+                          <div style={{fontSize:9,fontFamily:"Arial,sans-serif",color:"#9ca3af",textTransform:"uppercase",letterSpacing:.5,marginTop:2}}>{s.k}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                      {l.piano&&<Chip>🏢 {l.piano}</Chip>}
+                      {ppm(l.prezzo,l.dimensione)&&<Chip>{ppm(l.prezzo,l.dimensione)}</Chip>}
+                      {l.terrazzo&&<Chip bg="#d1fae5" color="#065f46">🌿 Terrazzo</Chip>}
+                      {l.box&&<Chip bg="#e0e7ff" color="#3730a3">🚗 Box</Chip>}
+                      {l.cantina&&<Chip bg="#fef9c3" color="#713f12">📦 Cantina</Chip>}
+                    </div>
+                    {l.voto>0&&<div style={{fontSize:18,color:"#f59e0b",letterSpacing:2}}>{"★".repeat(l.voto)}{"☆".repeat(5-l.voto)}</div>}
+                    {l.note&&<div style={{fontSize:12,fontFamily:"Arial,sans-serif",color:"#6b7280",fontStyle:"italic",lineHeight:1.4}}>💬 {l.note}</div>}
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",borderTop:"1px solid #e5e7eb",paddingTop:10,marginTop:2}}>
+                      {l.link
+                        ?<a href={l.link} target="_blank" rel="noopener noreferrer" style={{fontSize:13,fontFamily:"Arial,sans-serif",color:"#c8a96e",fontWeight:700,textDecoration:"none"}}>Vedi annuncio →</a>
+                        :<span/>}
+                      <div style={{display:"flex",gap:6}}>
+                        <button onClick={()=>startEdit(l)} style={{background:"#f3f4f6",border:"none",borderRadius:7,padding:"6px 10px",cursor:"pointer",fontSize:14}}>✏️</button>
+                        <button onClick={()=>setConfirm(l._id)} style={{background:"#fee2e2",border:"none",borderRadius:7,padding:"6px 10px",cursor:"pointer",fontSize:14}}>🗑</button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── AGGIUNGI/MODIFICA ── */}
+      {tab==="aggiungi"&&(
+        <div style={{padding:"20px 16px 60px",maxWidth:680,margin:"0 auto"}}>
+          <div style={{background:"#fff",borderRadius:12,padding:22,border:"1px solid #e5e7eb"}}>
+            <h2 style={{fontSize:20,fontWeight:700,margin:"0 0 4px"}}>{editId!==null?"✏️ Modifica":"＋ Nuovo annuncio"}</h2>
+            <p style={{fontSize:13,fontFamily:"Arial,sans-serif",color:"#6b7280",margin:"0 0 20px",lineHeight:1.6}}>
+              Incolla il link dell'annuncio trovato sul sito. Gli altri campi sono facoltativi.
+            </p>
+            <div className="form-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"14px 16px"}}>
+              <FRow label="🔗 Link annuncio (obbligatorio)" span={2}>
+                <input style={fi} placeholder="https://www.immobiliare.it/annunci/12345678/" value={form.link} onChange={e=>setForm(f=>({...f,link:e.target.value}))}/>
+              </FRow>
+              <FRow label="Titolo">
+                <input style={fi} placeholder="es. Trilocale con terrazzo" value={form.titolo} onChange={e=>setForm(f=>({...f,titolo:e.target.value}))}/>
+              </FRow>
+              <FRow label="Fonte">
+                <select style={fi} value={form.fonte} onChange={e=>setForm(f=>({...f,fonte:e.target.value}))}>
+                  {SOURCES.map(s=><option key={s}>{s}</option>)}
+                </select>
+              </FRow>
+              <FRow label="Zona">
+                <select style={fi} value={form.zona} onChange={e=>setForm(f=>({...f,zona:e.target.value}))}>
+                  <option value="">— seleziona —</option>
+                  {ZONE.map(z=><option key={z}>{z}</option>)}
+                </select>
+              </FRow>
+              <FRow label="Indirizzo">
+                <input style={fi} placeholder="Via Roma 12" value={form.indirizzo} onChange={e=>setForm(f=>({...f,indirizzo:e.target.value}))}/>
+              </FRow>
+              <FRow label="Prezzo (€)">
+                <input style={fi} type="number" inputMode="numeric" placeholder="380000" value={form.prezzo} onChange={e=>setForm(f=>({...f,prezzo:e.target.value}))}/>
+              </FRow>
+              <FRow label="Superficie (m²)">
+                <input style={fi} type="number" inputMode="numeric" placeholder="85" value={form.dimensione} onChange={e=>setForm(f=>({...f,dimensione:e.target.value}))}/>
+              </FRow>
+              <FRow label="Vani">
+                <input style={fi} type="number" inputMode="numeric" placeholder="3" value={form.vani} onChange={e=>setForm(f=>({...f,vani:e.target.value}))}/>
+              </FRow>
+              <FRow label="Piano">
+                <input style={fi} placeholder="3° su 5" value={form.piano} onChange={e=>setForm(f=>({...f,piano:e.target.value}))}/>
+              </FRow>
+              <FRow label="Condizioni">
+                <select style={fi} value={form.condizioni} onChange={e=>setForm(f=>({...f,condizioni:e.target.value}))}>
+                  {Object.keys(COND).map(c=><option key={c}>{c}</option>)}
+                </select>
+              </FRow>
+              <FRow label="Il tuo voto" span={2}>
+                <div style={{display:"flex",gap:6}}>
+                  {[1,2,3,4,5].map(n=>(
+                    <button key={n} onClick={()=>setForm(f=>({...f,voto:n}))}
+                      style={{fontSize:30,background:"none",border:"none",cursor:"pointer",opacity:form.voto>=n?1:.2,padding:0,color:"#f59e0b"}}>★</button>
+                  ))}
+                </div>
+              </FRow>
+              <FRow label="Extra" span={2}>
+                <div style={{display:"flex",gap:20,flexWrap:"wrap"}}>
+                  {[["terrazzo","🌿 Terrazzo"],["box","🚗 Box"],["cantina","📦 Cantina"]].map(([k,lbl])=>(
+                    <label key={k} style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontFamily:"Arial,sans-serif",fontSize:15}}>
+                      <input type="checkbox" style={{width:18,height:18}} checked={!!form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.checked}))}/>
+                      {lbl}
+                    </label>
+                  ))}
+                </div>
+              </FRow>
+              <FRow label="Note personali" span={2}>
+                <textarea style={{...fi,height:90,resize:"vertical"}} placeholder="Impressioni, pro/contro, cose da verificare..."
+                  value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))}/>
+              </FRow>
+            </div>
+            <div style={{display:"flex",gap:10,marginTop:22,flexWrap:"wrap"}}>
+              <button onClick={saveForm} style={{...addBtn,background:"#16a34a",padding:"14px 28px",fontSize:16,borderRadius:10}}>
+                {editId!==null?"💾 Salva modifiche":"✅ Aggiungi annuncio"}
+              </button>
+              <button onClick={()=>{setForm(EMPTY);setEditId(null);setTab("annunci");}} style={{...addBtn,background:"#6b7280"}}>Annulla</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODALE ELIMINA */}
+      {confirm!==null&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:20}}>
+          <div style={{background:"#fff",borderRadius:16,padding:28,textAlign:"center",maxWidth:310,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,.25)"}}>
+            <div style={{fontSize:36,marginBottom:8}}>🗑</div>
+            <div style={{fontSize:17,fontWeight:700,marginBottom:8}}>Eliminare questo annuncio?</div>
+            <p style={{fontSize:13,fontFamily:"Arial,sans-serif",color:"#6b7280",margin:"0 0 20px"}}>L'operazione non è reversibile.</p>
+            <div style={{display:"flex",gap:10,justifyContent:"center"}}>
+              <button onClick={()=>delItem(confirm)} style={{...addBtn,background:"#dc2626"}}>Sì, elimina</button>
+              <button onClick={()=>setConfirm(null)} style={{...addBtn,background:"#6b7280"}}>Annulla</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
