@@ -71,8 +71,8 @@ const SRC_COLOR = {
 const COND = {"Ottimo":"#16a34a","Buono":"#b45309","Da ristrutturare":"#dc2626"};
 const ZONE = [
   "Navigli","Isola / Garibaldi","Città Studi","Greco / Turro","Porta Vittoria",
-  "Porta Venezia","Porta Romana","Cadore","Susa","Nolo","Repubblica","Lorenteggio","Bicocca",
-  "Fiera / De Angeli","Vigentino","Bande Nere","Centro Storico","Altra zona",
+  "Porta Venezia","Porta Romana","Cadore","Susa","Nolo","Repubblica","Lambrate","Lorenteggio",
+  "Fiera / De Angeli","Vigentino","Centro Storico","Altra zona",
 ];
 const SEARCHES = [
   {nome:"Immobiliare.it", url:"https://www.immobiliare.it/vendita-appartamenti/milano/?prezzoMassimo=470000&superficieMinima=70&superficieMassima=100"},
@@ -82,15 +82,11 @@ const SEARCHES = [
   {nome:"Gabetti",        url:"https://www.gabetti.it/vendita/appartamento/milano"},
 ];
 const SOCIALS = [
-  {nome:"@carolachiusano",         piattaforma:"Instagram", follower:"126K", url:"https://www.instagram.com/carolachiusano/",         note:"Milano · Torino · Parigi — la più seguita"},
-  {nome:"@annabuono_",             piattaforma:"Instagram", follower:"30K",  url:"https://www.instagram.com/annabuono_/",             note:"Caseperfette · CityLife · tutta Milano"},
-  {nome:"@jacopotartaglia",        piattaforma:"Instagram", follower:"17K",  url:"https://www.instagram.com/jacopotartaglia/",        note:"Agente immobiliare · mercato e prezzi"},
-  {nome:"@elisabettacasabase",     piattaforma:"Instagram", follower:"—",    url:"https://www.instagram.com/elisabettacasabase/",     note:"Torino · sta aprendo su Milano"},
-  {nome:"RossoMattone",            piattaforma:"Instagram", follower:"—",    url:"https://www.instagram.com/rossomattone.eu/",        note:"Agenzia milanese · property finder"},
-  {nome:"@immobiliare.it",         piattaforma:"TikTok",    follower:"22.6K",url:"https://www.tiktok.com/@immobiliare.it",            note:"Profilo ufficiale Immobiliare.it"},
-  {nome:"@gangimmobiliaremilano",  piattaforma:"TikTok",    follower:"—",    url:"https://www.tiktok.com/@gangimmobiliaremilano",     note:"Agenzia milanese · tour appartamenti"},
-  {nome:"@gianlucatorre01",        piattaforma:"TikTok",    follower:"—",    url:"https://www.tiktok.com/@gianlucatorre01",           note:"Tour proprietà · Engel & Völkers Milano"},
-  {nome:"@rossomattoneimmobiliare",piattaforma:"TikTok",    follower:"—",    url:"https://www.tiktok.com/@rossomattoneimmobiliare",   note:"RossoMattone su TikTok"},
+  {nome:"@carolachiusano",     follower:"126K", url:"https://www.instagram.com/carolachiusano/",     note:"Milano · Torino · Parigi — la più seguita"},
+  {nome:"@annabuono_",         follower:"30K",  url:"https://www.instagram.com/annabuono_/",         note:"Caseperfette · CityLife · tutta Milano"},
+  {nome:"@jacopotartaglia",    follower:"17K",  url:"https://www.instagram.com/jacopotartaglia/",    note:"Agente immobiliare · mercato e prezzi"},
+  {nome:"@elisabettacasabase", follower:"—",    url:"https://www.instagram.com/elisabettacasabase/", note:"Torino · sta aprendo su Milano"},
+  {nome:"RossoMattone",        follower:"—",    url:"https://www.instagram.com/rossomattone.eu/",    note:"Agenzia milanese · property finder"},
 ];
 const EMPTY = {titolo:"",zona:"",indirizzo:"",fonte:"Immobiliare.it",prezzo:"",dimensione:"",vani:"",piano:"",condizioni:"Buono",terrazzo:false,box:false,cantina:false,voto:3,note:"",link:""};
 
@@ -260,46 +256,38 @@ function App(){
       {/* TAB RICERCHE */}
       {tab==="ricerche"&&(
         <div style={{padding:"20px 16px 40px",maxWidth:760,margin:"0 auto"}}>
-          <p style={{fontSize:14,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",lineHeight:1.7,marginBottom:18}}>
-            Apri le piattaforme già filtrate su Milano. Quando trovi un annuncio, copia il link e aggiungilo in <b>＋ Aggiungi</b>.
-          </p>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:14}}>
-            {SEARCHES.map(({nome,url})=>{
-              const sc=SRC_COLOR[nome]||SRC_COLOR["Altro"];
-              return (
-                <a key={nome} href={url} target="_blank" rel="noopener noreferrer"
-                   style={{background:"#8B3214",borderRadius:10,padding:18,borderLeft:"4px solid #B5921B",display:"flex",flexDirection:"column",gap:8,textDecoration:"none",color:"inherit",boxShadow:"0 2px 6px rgba(0,0,0,.2)"}}>
-                  <Badge fonte={nome}/>
-                  <div style={{fontSize:15,fontWeight:700,fontFamily:"Playfair Display,Georgia,serif",color:"#FAF0E6"}}>Cerca su {nome}</div>
-                  <div style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",lineHeight:1.5,wordBreak:"break-all",opacity:.7}}>{url.replace("https://","").slice(0,46)}…</div>
-                  <div style={{background:"#B5921B",color:"#FAF0E6",borderRadius:7,padding:"8px 14px",fontSize:13,fontWeight:700,fontFamily:"Courier Prime,Courier New,monospace",alignSelf:"flex-start"}}>Apri →</div>
-                </a>
-              );
-            })}
+          {/* BLOCCO 1: Piattaforme */}
+          <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",color:"#E8C9A0",fontFamily:"Courier Prime,Courier New,monospace",marginBottom:12,opacity:.7}}>🏢 Piattaforme e agenzie immobiliari</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:10}}>
+            {SEARCHES.map(({nome,url})=>(
+              <a key={nome} href={url} target="_blank" rel="noopener noreferrer"
+                 style={{background:"#8B3214",borderRadius:10,padding:14,borderLeft:"4px solid #B5921B",display:"flex",flexDirection:"column",gap:6,textDecoration:"none",color:"inherit",boxShadow:"0 2px 6px rgba(0,0,0,.2)"}}>
+                <Badge fonte={nome}/>
+                <div style={{fontSize:14,fontWeight:700,fontFamily:"Playfair Display,Georgia,serif",color:"#FAF0E6"}}>Cerca su {nome}</div>
+                <div style={{fontSize:10,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",lineHeight:1.4,opacity:.7}}>{url.replace("https://","").slice(0,44)}…</div>
+                <div style={{background:"#B5921B",color:"#FAF0E6",borderRadius:6,padding:"6px 12px",fontSize:12,fontWeight:700,fontFamily:"Courier Prime,Courier New,monospace",alignSelf:"flex-start"}}>Apri →</div>
+              </a>
+            ))}
           </div>
 
-          {/* Profili social */}
-          <div style={{marginTop:28}}>
-            <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",color:"#E8C9A0",fontFamily:"Courier Prime,Courier New,monospace",marginBottom:14,opacity:.7}}>📱 Profili Social da monitorare</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:12}}>
-              {SOCIALS.map(({nome,piattaforma,follower,url,note})=>{
-                const isIG=piattaforma==="Instagram";
-                const col=isIG?"#be185d":"#3730a3";
-                const bg =isIG?"#fce7f3":"#e0e7ff";
-                return (
-                  <a key={nome} href={url} target="_blank" rel="noopener noreferrer"
-                     style={{background:"#8B3214",borderRadius:10,padding:14,borderLeft:"4px solid #B5921B",display:"flex",flexDirection:"column",gap:6,textDecoration:"none",color:"inherit",boxShadow:"0 2px 6px rgba(0,0,0,.2)"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <span style={{fontSize:11,fontWeight:700,fontFamily:"Courier Prime,Courier New,monospace",padding:"2px 8px",borderRadius:20,background:"#B5921B",color:"#FAF0E6"}}>{isIG?"📸":"🎵"} {piattaforma}</span>
-                      {follower!=="—"&&<span style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",opacity:.7}}>{follower}</span>}
-                    </div>
-                    <div style={{fontSize:13,fontWeight:700,fontFamily:"Playfair Display,Georgia,serif",color:"#FAF0E6"}}>{nome}</div>
-                    <div style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",lineHeight:1.4,opacity:.7}}>{note}</div>
-                    <div style={{fontSize:12,fontFamily:"Courier Prime,Courier New,monospace",color:"#B5921B",fontWeight:700}}>Apri e attiva 🔔 →</div>
-                  </a>
-                );
-              })}
-            </div>
+          {/* Divider */}
+          <div style={{height:1,background:"rgba(255,255,255,.15)",margin:"22px 0"}}/>
+
+          {/* BLOCCO 2: Instagram */}
+          <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",color:"#E8C9A0",fontFamily:"Courier Prime,Courier New,monospace",marginBottom:12,opacity:.7}}>📸 Profili Instagram da monitorare</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:10}}>
+            {SOCIALS.map(({nome,follower,url,note})=>(
+              <a key={nome} href={url} target="_blank" rel="noopener noreferrer"
+                 style={{background:"#8B3214",borderRadius:10,padding:14,borderLeft:"4px solid #B5921B",display:"flex",flexDirection:"column",gap:6,textDecoration:"none",color:"inherit",boxShadow:"0 2px 6px rgba(0,0,0,.2)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:10,fontWeight:700,fontFamily:"Courier Prime,Courier New,monospace",padding:"2px 8px",borderRadius:20,background:"#B5921B",color:"#FAF0E6"}}>📸 Instagram</span>
+                  {follower!=="—"&&<span style={{fontSize:10,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",opacity:.7}}>{follower}</span>}
+                </div>
+                <div style={{fontSize:13,fontWeight:700,fontFamily:"Playfair Display,Georgia,serif",color:"#FAF0E6"}}>{nome}</div>
+                <div style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",lineHeight:1.4,opacity:.7}}>{note}</div>
+                <div style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#B5921B",fontWeight:700}}>Apri e attiva 🔔 →</div>
+              </a>
+            ))}
           </div>
 
           {/* Istruzione iPhone */}
