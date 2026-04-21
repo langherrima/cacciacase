@@ -13,6 +13,7 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
   <script>
@@ -38,6 +39,7 @@
     window.dispatchEvent(new Event("dbReady"));
   </script>
 
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
   <style>
@@ -133,6 +135,85 @@ function FRow({label,children,span=1}){
 }
 const fi  = {border:"1px solid rgba(255,255,255,.3)",borderRadius:7,padding:"10px 12px",fontSize:15,fontFamily:"Courier Prime,Courier New,monospace",outline:"none",background:"#9B3A17",width:"100%",boxSizing:"border-box",color:"#FAF0E6"};
 const btn = {background:"#B5921B",color:"#FAF0E6",border:"none",borderRadius:8,padding:"10px 18px",fontSize:14,fontWeight:700,fontFamily:"Courier Prime,Courier New,monospace",cursor:"pointer"};
+
+
+function MapView({listings}){
+  const mapRef = React.useRef(null);
+  const instanceRef = React.useRef(null);
+  const markersRef = React.useRef([]);
+
+  const condColor = {"Ottimo":"#16a34a","Buono":"#B5921B","Da ristrutturare":"#dc2626"};
+
+  function makeIcon(color){
+    return L.divIcon({
+      className:"",
+      html:`<div style="width:26px;height:26px;background:${color};border:3px solid #FAF0E6;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:11px">🏠</div>`,
+      iconSize:[26,26],iconAnchor:[13,13],popupAnchor:[0,-16]
+    });
+  }
+
+  useEffect(()=>{
+    if(!mapRef.current) return;
+    if(!instanceRef.current){
+      instanceRef.current = L.map(mapRef.current,{zoomControl:true}).setView([45.4654,9.1859],12);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+        attribution:"© OpenStreetMap",maxZoom:18
+      }).addTo(instanceRef.current);
+    }
+    // Remove old markers
+    markersRef.current.forEach(m=>m.remove());
+    markersRef.current=[];
+
+    // Geocode and add markers
+    listings.forEach(async l=>{
+      if(!l.indirizzo&&!l.zona) return;
+      const query = `${l.indirizzo||""} ${l.zona||""} Milano, Italy`.trim();
+      try{
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`);
+        const data = await res.json();
+        if(!data.length) return;
+        const lat=parseFloat(data[0].lat), lng=parseFloat(data[0].lon);
+        const color=condColor[l.condizioni]||"#888";
+        const stars="★".repeat(l.voto||0)+"☆".repeat(5-(l.voto||0));
+        const popup=`<div style="min-width:180px;font-family:Courier Prime,monospace">
+          <div style="font-family:Playfair Display,serif;font-size:13px;font-weight:700;color:#3D1C0A;margin-bottom:3px">${l.titolo||"Annuncio"}</div>
+          <div style="font-size:11px;color:#8B5E3C;margin-bottom:6px">📍 ${l.zona||""}${l.indirizzo?" · "+l.indirizzo:""}</div>
+          <div style="display:flex;gap:6px;margin-bottom:5px;flex-wrap:wrap">
+            <span style="background:#B5921B;color:#FAF0E6;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:700">${l.prezzo?`€ ${Number(l.prezzo).toLocaleString("it-IT")}`:""}</span>
+            <span style="background:#B5921B;color:#FAF0E6;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:700">${l.dimensione?l.dimensione+" m²":""}</span>
+          </div>
+          <div style="font-size:14px;color:${color};margin-bottom:4px">${stars}</div>
+          ${l.link?`<a href="${l.link}" target="_blank" style="font-size:11px;color:#8B3214;font-weight:700">Vedi annuncio →</a>`:""}
+        </div>`;
+        const marker=L.marker([lat,lng],{icon:makeIcon(color)}).bindPopup(popup).addTo(instanceRef.current);
+        markersRef.current.push(marker);
+      }catch(e){}
+    });
+  },[listings]);
+
+  const withLocation = listings.filter(l=>l.indirizzo||l.zona).length;
+
+  return (
+    <div style={{borderRadius:10,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,.3)"}}>
+      <div style={{background:"#8B3214",padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div style={{fontFamily:"Playfair Display,Georgia,serif",fontSize:15,fontWeight:700,color:"#FAF0E6"}}>Mappa annunci · Milano</div>
+        <div style={{fontSize:10,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",opacity:.7,textTransform:"uppercase",letterSpacing:1}}>{withLocation} annunci posizionati</div>
+      </div>
+      <div ref={mapRef} style={{height:420,width:"100%"}}/>
+      <div style={{background:"#8B3214",padding:"10px 14px",display:"flex",gap:20,flexWrap:"wrap",alignItems:"center"}}>
+        {[["#16a34a","Ottimo / Ristrutturato"],["#B5921B","Buono"],["#dc2626","Da ristrutturare"]].map(([col,label])=>(
+          <div key={label} style={{display:"flex",alignItems:"center",gap:6}}>
+            <div style={{width:12,height:12,borderRadius:"50%",background:col,border:"2px solid #FAF0E6"}}/>
+            <span style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0"}}>{label}</span>
+          </div>
+        ))}
+        {listings.length>0&&withLocation===0&&(
+          <span style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",opacity:.7}}>Aggiungi un indirizzo agli annunci per vederli sulla mappa</span>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function App(){
   const [dbReady,  setDbReady]  = useState(!!window.__dbReady);
@@ -242,6 +323,7 @@ function App(){
           {[
             {id:"ricerche",icon:"🔗",label:"Ricerche"},
             {id:"annunci", icon:"📋",label:`Annunci (${listings.length})`},
+            {id:"mappa",   icon:"🗺",  label:"Mappa"},
             {id:"aggiungi",icon:editId!==null?"✏️":"＋",label:editId!==null?"Modifica":"Aggiungi"},
           ].map(t=>(
             <button key={t.id}
@@ -300,6 +382,14 @@ function App(){
               4. Icona sul desktop, schermo intero, dati sincronizzati ovunque! 🎉
             </div>
           </div>
+        </div>
+      )}
+
+
+      {/* TAB MAPPA */}
+      {tab==="mappa"&&(
+        <div style={{padding:"16px 16px 40px",maxWidth:760,margin:"0 auto"}}>
+          <MapView listings={listings}/>
         </div>
       )}
 
