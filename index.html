@@ -164,34 +164,27 @@ function MapView({listings}){
     markersRef.current.forEach(m=>m.remove());
     markersRef.current=[];
 
-    // Geocode and add markers
-    listings.forEach(async l=>{
-      if(!l.indirizzo&&!l.zona) return;
-      const query = `${l.indirizzo||""} ${l.zona||""} Milano, Italy`.trim();
-      try{
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`);
-        const data = await res.json();
-        if(!data.length) return;
-        const lat=parseFloat(data[0].lat), lng=parseFloat(data[0].lon);
-        const color=condColor[l.condizioni]||"#888";
-        const stars="★".repeat(l.voto||0)+"☆".repeat(5-(l.voto||0));
-        const popup=`<div style="min-width:180px;font-family:Courier Prime,monospace">
-          <div style="font-family:Playfair Display,serif;font-size:13px;font-weight:700;color:#3D1C0A;margin-bottom:3px">${l.titolo||"Annuncio"}</div>
-          <div style="font-size:11px;color:#8B5E3C;margin-bottom:6px">📍 ${l.zona||""}${l.indirizzo?" · "+l.indirizzo:""}</div>
-          <div style="display:flex;gap:6px;margin-bottom:5px;flex-wrap:wrap">
-            <span style="background:#B5921B;color:#FAF0E6;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:700">${l.prezzo?`€ ${Number(l.prezzo).toLocaleString("it-IT")}`:""}</span>
-            <span style="background:#B5921B;color:#FAF0E6;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:700">${l.dimensione?l.dimensione+" m²":""}</span>
-          </div>
-          <div style="font-size:14px;color:${color};margin-bottom:4px">${stars}</div>
-          ${l.link?`<a href="${l.link}" target="_blank" style="font-size:11px;color:#8B3214;font-weight:700">Vedi annuncio →</a>`:""}
-        </div>`;
-        const marker=L.marker([lat,lng],{icon:makeIcon(color)}).bindPopup(popup).addTo(instanceRef.current);
-        markersRef.current.push(marker);
-      }catch(e){}
+    // Add markers using stored coordinates
+    listings.forEach(l=>{
+      if(!l.lat||!l.lng) return;
+      const color=condColor[l.condizioni]||"#888";
+      const stars="★".repeat(l.voto||0)+"☆".repeat(5-(l.voto||0));
+      const popup=`<div style="min-width:180px;font-family:Courier Prime,monospace">
+        <div style="font-family:Playfair Display,serif;font-size:13px;font-weight:700;color:#3D1C0A;margin-bottom:3px">${l.titolo||"Annuncio"}</div>
+        <div style="font-size:11px;color:#8B5E3C;margin-bottom:6px">📍 ${l.zona||""}${l.indirizzo?" · "+l.indirizzo:""}</div>
+        <div style="display:flex;gap:6px;margin-bottom:5px;flex-wrap:wrap">
+          <span style="background:#B5921B;color:#FAF0E6;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:700">${l.prezzo?`€ ${Number(l.prezzo).toLocaleString("it-IT")}`:""}</span>
+          <span style="background:#B5921B;color:#FAF0E6;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:700">${l.dimensione?l.dimensione+" m²":""}</span>
+        </div>
+        <div style="font-size:14px;color:${color};margin-bottom:4px">${stars}</div>
+        ${l.link?`<a href="${l.link}" target="_blank" style="font-size:11px;color:#8B3214;font-weight:700">Vedi annuncio →</a>`:""}
+      </div>`;
+      const marker=L.marker([l.lat,l.lng],{icon:makeIcon(color)}).bindPopup(popup).addTo(instanceRef.current);
+      markersRef.current.push(marker);
     });
   },[listings]);
 
-  const withLocation = listings.filter(l=>l.indirizzo||l.zona).length;
+  const withLocation = listings.filter(l=>l.lat&&l.lng).length;
 
   return (
     <div style={{borderRadius:10,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,.3)"}}>
@@ -209,6 +202,9 @@ function MapView({listings}){
         ))}
         {listings.length>0&&withLocation===0&&(
           <span style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",opacity:.7}}>Aggiungi un indirizzo agli annunci per vederli sulla mappa</span>
+        )}
+        {listings.length===0&&(
+          <span style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",opacity:.7}}>Nessun annuncio ancora — aggiungili dalla tab ＋ Aggiungi</span>
         )}
       </div>
     </div>
@@ -247,11 +243,26 @@ function App(){
     return unsub;
   },[dbReady]);
 
+  const geocode = async (indirizzo, zona) => {
+    const q = `${indirizzo||""} ${zona||""} Milano, Italy`.trim();
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`);
+      const data = await res.json();
+      if(data.length) return {lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon)};
+    } catch(e){}
+    return null;
+  };
+
   const saveForm = async ()=>{
     if(!form.link&&!form.titolo) return;
     setSaving(true);
     try {
       const {_id,_ts,...data} = form;
+      // Geocodifica solo se l'indirizzo è cambiato o non ci sono ancora coordinate
+      if((data.indirizzo||data.zona) && !data.lat) {
+        const coords = await geocode(data.indirizzo, data.zona);
+        if(coords){ data.lat = coords.lat; data.lng = coords.lng; }
+      }
       if(editId!==null){
         await window.__db.update(editId, data);
       } else {
