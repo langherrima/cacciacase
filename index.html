@@ -351,14 +351,15 @@ function IGScraperTab({onSaveToAnnunci}) {
     setLoading(false);
   };
 
-  const analyzeAll = (postsToAnalyze) => {
+  const analyzeAll = async (postsToAnalyze) => {
     setAnalyzing(true);
     setAnalyzeProgress(0);
     const results = {};
     const disc = {};
-    postsToAnalyze.forEach((post, i) => {
+    for (let i = 0; i < postsToAnalyze.length; i++) {
+      const post = postsToAnalyze[i];
       const key = post.id || post.url;
-      if (analyzed[key]) { setAnalyzeProgress(i+1); return; }
+      if (analyzed[key] || discarded[key]) { setAnalyzeProgress(i+1); continue; }
       try {
         const parsed = analyzeCaption(post.caption);
         if (parsed) {
@@ -367,7 +368,13 @@ function IGScraperTab({onSaveToAnnunci}) {
         }
       } catch(e) {}
       setAnalyzeProgress(i+1);
-    });
+      // yield to React every 5 posts so UI updates
+      if (i % 5 === 4) {
+        setAnalyzed(prev => ({...prev, ...results}));
+        setDiscarded(prev => ({...prev, ...disc}));
+        await new Promise(r => setTimeout(r, 50));
+      }
+    }
     setAnalyzed(prev => ({...prev, ...results}));
     setDiscarded(prev => ({...prev, ...disc}));
     setAnalyzing(false);
