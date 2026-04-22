@@ -120,72 +120,155 @@ function mapZona(raw) {
   return "Altra zona";
 }
 
-function parseImmobiliareEmail(rawText) {
-  // Immobiliare.it usa caratteri BOM (\uFEFF) come separatori invisibili.
-  // Quando si copia il testo dell'email, il pattern è:
-  // \uFEFF + Titolo + \uFEFF + Zona + € + Prezzo + Mq + m² | N locali | ...
-  // Il prezzo e i mq sono concatenati senza spazio: "298.00053 m²"
+function parseEmail(rawText) {
+  // Gestisce tre fonti, ognuna col proprio formato:
+  //
+  // IMMOBILIARE.IT
+  //   Formato A (Gmail browser, BOM concatenati):
+  //     "Parco Trotter€ 298.00053 m² | 2 locali | 1 bagno"
+  //   Formato B (Apple Mail / altri client, righe separate):
+  //     "Bilocale via Padova 60, Parco Trotter, Milano"
+  //     "Parco Trotter"  /  "€ 298.000"  /  "53 m² | 2 locali | 1 bagno"
+  //
+  // IDEALISTA
+  //   "Trilocale in Via Stradivari, Buenos Aires, Milano"
+  //   "480.000 €"          ← euro DOPO il numero
+  //   "90 m²  3 stanze  1º piano"
+  //
+  // CASA.IT
+  //   "Trilocale in affitto in Via Foppa 40,"
+  //   "Washington, Milano (MI)"
+  //   "€ 950"              ← euro PRIMA, nessuna info locali
+  //   "20 m²"
 
   const BOM = '\uFEFF';
-  const NOISE = /VEDI DETTAGLI|AVVIA RICERCA|GESTISCI RICERCA|DISABILITA|Ciao\s+\w|La tua ricerca|Categoria|Tutti gli immobili|SCARICA|SCOPRI|Prova anche|Questa email|Immobiliare\.it\.|Condizioni generali|privacy|cancellazione|Quanto vale|Scarica l'app|Forwarded|Subject:|Da:|Date:|To:/i;
+  const NOISE = /^(VEDI DETTAGLI|AVVIA RICERCA|GESTISCI|DISABILITA|MODIFICA|CONTATTA|Vedi tutti|Vedi \d+ foto|Scarica l|Questo annuncio|Da Le tue|Puoi controllare|Smettere di|Con l.app|Problemi\?|Utilizzando|© 20|Copyright|Condizioni|Privacy|Non vuoi|Questa (mail|email)|La tua ricerca|Modifica$|noreply|Forwarded|Subject:|Da:|Date:|To:|mailing list|Annulla iscrizione|non essendoci|ti suggeriamo|Vuoi ricevere|Ciao,?\s*$)/i;
 
-  // Normalizza: sostituisci BOM con newline, poi splitta
   const text = rawText.replace(new RegExp(BOM, 'g'), '\n');
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+  const DEFAULTS = { condizioni:'Buono', terrazzo:false, box:false, cantina:false, voto:3, note:'', link:'' };
+
+  // Fonte rilevata dall'intestazione
+  const detectSource = () => {
+    const head = lines.slice(0, 10).join(' ').toLowerCase();
+    if (head.includes('immobiliare')) return 'Immobiliare.it';
+    if (head.includes('idealista'))  return 'Idealista';
+    if (head.includes('casa.it'))    return 'Casa.it';
+    return 'Altro';
+  };
+  const fonte = detectSource();
 
   const results = [];
+  const seen = new Set();
+
+  const push = (obj) => {
+    if (!obj.titolo && !obj.zonaRaw) return;
+    const key = obj.titolo || obj.zonaRaw;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const { zonaRaw, ...rest } = obj;
+    results.push({ ...DEFAULTS, fonte, ...rest, zona: mapZona(zonaRaw || '') });
+  };
+
+  const prevNoise = (i) => NOISE.test(lines[i] || '');
+
+  // Cerca una riga non-rumore guardando indietro, saltando le righe indicate
+  const lookBack = (fromIdx, skip=[]) => {
+    for (let j = fromIdx; j >= Math.max(0, fromIdx - 6); j--) {
+      const c = lines[j];
+      if (prevNoise(j)) continue;
+      if (skip.includes(c)) continue;
+      if (c.length >= 4 && c.length <= 250) return { val: c, idx: j };
+    }
+    return { val: '', idx: -1 };
+  };
+
+  // Estrae zona dal titolo Idealista/Casa.it:
+  // "Trilocale in Via X, Buenos Aires, Milano" → "Buenos Aires"
+  const zoneFromTitle = (title) => {
+    const parts = title.split(',').map(s => s.trim());
+    const mi = parts.findIndex(p => /\bmilano\b/i.test(p));
+    if (mi > 0) return parts[mi - 1].replace(/\s*\(MI\)\s*$/i, '').trim();
+    return '';
+  };
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Cerca la riga con il pattern prezzo+mq concatenati
-    // Esempio: "Parco Trotter€ 298.00053 m² | 2 locali | 1 bagno"
-    // Regex: (zona)(€)(prezzo italiano)(mq)(m²)|(locali) locali
-    const m = line.match(/^(.{0,60}?)€\s*(\d{1,3}(?:\.\d{3})*)(\d+)\s*m²\s*\|\s*(\d+)\s*locali/);
-    if (!m) continue;
-
-    const zonaRaw = m[1].trim();
-    const prezzoStr = m[2]; // es. "298.000"
-    const mqStr    = m[3]; // es. "53"
-    const locali   = m[4]; // es. "2"
-
-    // Cerca il titolo nelle righe precedenti (al massimo 3 indietro)
-    let titolo = '';
-    for (let j = i - 1; j >= Math.max(0, i - 4); j--) {
-      const candidate = lines[j];
-      if (NOISE.test(candidate)) continue;
-      if (candidate === zonaRaw) continue;
-      if (candidate.length >= 8 && candidate.length <= 200) {
-        titolo = candidate;
-        break;
-      }
+    // ── IMMOBILIARE FORMATO A: BOM → tutto su una riga ─────────────────────
+    // "Parco Trotter€ 298.00053 m² | 2 locali"
+    const mA = line.match(/^(.{0,60}?)€\s*(\d{1,3}(?:\.\d{3})*)(\d+)\s*m²\s*\|\s*(\d+)\s*locali/);
+    if (mA) {
+      const zonaRaw = mA[1].trim();
+      const { val: titolo } = lookBack(i - 1, [zonaRaw]);
+      push({ titolo, zonaRaw, prezzo: mA[2].replace(/\./g,''), dimensione: mA[3], vani: mA[4] });
+      continue;
     }
 
-    if (!titolo) continue;
+    // ── IDEALISTA: prezzo termina con € ─────────────────────────────────────
+    // "480.000 €"
+    const mIdeal = line.match(/^([\d.]+)\s*€\s*$/);
+    if (mIdeal) {
+      const prezzoNum = mIdeal[1].replace(/\./g, '');
+      // titolo: riga precedente non-rumore
+      const { val: titolo } = lookBack(i - 1, []);
+      // dettagli: riga successiva con m²
+      let mqStr = '', locali = '';
+      for (let j = i + 1; j <= Math.min(lines.length - 1, i + 3); j++) {
+        const mMq = lines[j].match(/(\d+)\s*m²/);
+        if (mMq) {
+          mqStr = mMq[1];
+          const mLoc = lines[j].match(/(\d+)\s*stanze?/i);
+          if (mLoc) locali = mLoc[1];
+          break;
+        }
+      }
+      const zonaRaw = zoneFromTitle(titolo);
+      push({ titolo, zonaRaw, prezzo: prezzoNum, dimensione: mqStr, vani: locali });
+      continue;
+    }
 
-    // Converti prezzo italiano → numero puro: "298.000" → "298000"
-    const prezzoNum = prezzoStr.replace(/\./g, '');
+    // ── IMMOBILIARE FORMATO B + CASA.IT: prezzo inizia con € ────────────────
+    // "€ 396.000" / "€ 950"
+    const mPrice = line.match(/^€\s*([\d.]+)\s*$/);
+    if (mPrice) {
+      const nextLine = lines[i + 1] || '';
 
-    results.push({
-      titolo,
-      zona: mapZona(zonaRaw),
-      zonaRaw,
-      prezzo: prezzoNum,
-      dimensione: mqStr,
-      vani: locali,
-      fonte: 'Immobiliare.it',
-      condizioni: 'Buono',
-      terrazzo: false,
-      box: false,
-      cantina: false,
-      voto: 3,
-      note: '',
-      link: '',
-    });
+      // Ha "m²" nella riga successiva?
+      const mMq = nextLine.match(/^(\d+)\s*m²/);
+      if (mMq) {
+        const mqStr   = mMq[1];
+        const prezzoNum = mPrice[1].replace(/\./g, '');
+        // locali: opzionale ("| 2 locali" o "3 stanze")
+        const mLoc = nextLine.match(/(\d+)\s*(locali|stanze?)/i);
+        const locali = mLoc ? mLoc[1] : '';
+
+        // Cerca zona e titolo guardando indietro
+        let zonaRaw = '', titolo = '';
+        for (let j = i - 1; j >= Math.max(0, i - 6); j--) {
+          if (prevNoise(j)) continue;
+          const c = lines[j];
+          if (!zonaRaw && c.length >= 3 && c.length <= 80) {
+            zonaRaw = c;
+          } else if (zonaRaw && c.length >= 8) {
+            // Se la riga finisce con "," potrebbe essere prima metà di indirizzo (Casa.it)
+            titolo = c.endsWith(',') ? c + ' ' + zonaRaw : c;
+            break;
+          }
+        }
+        // Per Casa.it la zona è nel formato "Washington, Milano (MI)" → estrai solo la zona
+        const zonaClean = zonaRaw.replace(/,?\s*Milano\s*(\(MI\))?\s*$/i, '').trim();
+        push({ titolo: titolo || zonaRaw, zonaRaw: zonaClean || zonaRaw, prezzo: prezzoNum, dimensione: mqStr, vani: locali });
+        i++; // salta riga dettagli
+      }
+    }
   }
 
   return results;
 }
+// Alias per compatibilità
+const parseImmobiliareEmail = parseEmail;
 
 // ── COMPONENTI ───────────────────────────────────────────────────────────────
 
@@ -333,13 +416,23 @@ function App(){
     return unsub;
   },[dbReady]);
 
+  const extractStreet = (titolo) => {
+    const m = (titolo || '').match(/\b(via|piazza|corso|viale|largo|vicolo|strada)\s+[^,\n]+/i);
+    return m ? m[0].trim() : '';
+  };
+
   const geocode = async (indirizzo, zona) => {
-    const q = `${indirizzo||""} ${zona||""} Milano, Italy`.trim();
+    const zonaClean = (zona || '').replace(/altra zona/i, '').split(/[\/,]/)[0].trim();
+    const parts = [indirizzo, zonaClean, 'Milano', 'Italy'].filter(Boolean);
+    const q = parts.join(', ');
     try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`);
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`,
+        { headers: { 'Accept-Language': 'it' } }
+      );
       const data = await res.json();
-      if(data.length) return {lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon)};
-    } catch(e){}
+      if (data.length) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    } catch(e) {}
     return null;
   };
 
@@ -348,8 +441,9 @@ function App(){
     setSaving(true);
     try {
       const {_id,_ts,...data} = form;
-      if((data.indirizzo||data.zona) && !data.lat) {
-        const coords = await geocode(data.indirizzo, data.zona);
+      if((data.indirizzo||data.zona||data.titolo) && !data.lat) {
+        const street = data.indirizzo || extractStreet(data.titolo);
+        const coords = await geocode(street, data.zona);
         if(coords){ data.lat = coords.lat; data.lng = coords.lng; }
       }
       if(editId!==null){
@@ -389,8 +483,10 @@ function App(){
     try {
       const { zonaRaw, ...data } = item;
       const full = { ...EMPTY, ...data };
-      // Geocodifica sulla zona (non abbiamo l'indirizzo preciso dall'email)
-      const coords = await geocode('', data.zona !== 'Altra zona' ? data.zona : zonaRaw);
+      // Usa indirizzo stradale estratto dal titolo se disponibile, poi la zona
+      const street = extractStreet(data.titolo);
+      const zonaForGeo = data.zona !== 'Altra zona' ? data.zona : zonaRaw;
+      const coords = await geocode(street, zonaForGeo);
       if (coords) { full.lat = coords.lat; full.lng = coords.lng; }
       await window.__db.add(full);
       setAddedSet(prev => new Set([...prev, idx]));
@@ -608,10 +704,10 @@ function App(){
           {editId===null&&(
             <div style={{background:"#8B3214",borderRadius:12,padding:22,marginBottom:18}}>
               <h2 style={{fontSize:18,fontWeight:700,fontFamily:"Playfair Display,Georgia,serif",color:"#FAF0E6",margin:"0 0 6px"}}>
-                📧 Importa da email Immobiliare.it
+                📧 Importa da email
               </h2>
               <p style={{fontSize:13,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",margin:"0 0 14px",lineHeight:1.6}}>
-                Apri l'email di alert in Gmail, seleziona tutto (Cmd+A), copia (Cmd+C) e incolla qui sotto. Gli annunci vengono rilevati automaticamente.
+                Funziona con <b style={{color:"#FAF0E6"}}>Immobiliare.it</b>, <b style={{color:"#FAF0E6"}}>Idealista</b> e <b style={{color:"#FAF0E6"}}>Casa.it</b>. Apri l'email di alert, seleziona tutto (Cmd+A), copia (Cmd+C) e incolla qui sotto.
               </p>
               <div style={{position:"relative"}}>
                 <textarea
