@@ -186,9 +186,16 @@ async function fetchApifyDataset(datasetId, apiKey) {
 const KEYWORDS_STOP = ["affitto","in affitto","locazione","affittasi","si affitta","appartamento in affitto"];
 const KEYWORDS_OK   = ["bilocale","trilocale","tre locali","due locali","2 locali","3 locali","vendo","vendita","proponiamo in vendita","cedesi"];
 
+const DATE_FROM = new Date("2026-04-01T00:00:00Z");
+
 function preFilter(items) {
   return items.filter(item => {
     if (!item.caption) return false;
+    // Filtro data: solo post dal 1 aprile 2026
+    if (item.timestamp) {
+      const d = new Date(item.timestamp);
+      if (d < DATE_FROM) return false;
+    }
     const cap = item.caption.toLowerCase();
     if (KEYWORDS_STOP.some(k => cap.includes(k))) return false;
     if (!KEYWORDS_OK.some(k => cap.includes(k))) return false;
