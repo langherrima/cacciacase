@@ -172,392 +172,306 @@ function MapView({listings}){
 }
 
 // ── IG SCRAPER ───────────────────────────────────────────────────────
-// ── FILTRI TARGET ───────────────────────────────────────────────────
-const TARGET_ZONE = ["città studi","cittstudi","cadore","susa","argonne","porta romana","isola","nolo","dateo","lambrate"];
-const KEYWORDS_VENDITA = ["vendo","vendita","in vendita","proponiamo in vendita","cedesi","trattativa"];
-const KEYWORDS_STOP = ["affitto","in affitto","locazione","rent","affittasi","si affitta","appartamento in affitto"];
-const KEYWORDS_TIPO = ["bilocale","trilocale","tre locali","due locali","2 locali","3 locali","3locali","2locali"];
-
-function preFilter(items) {
-  return items.filter(item => {
-    if (!item.caption) return false;
-    const cap = item.caption.toLowerCase();
-
-    // Scarta affitti
-    if (KEYWORDS_STOP.some(k => cap.includes(k))) return false;
-
-    // Deve essere vendita o tipo giusto (uno dei due basta — l'AI poi decide)
-    const isVendita = KEYWORDS_VENDITA.some(k => cap.includes(k));
-    const isTipo = KEYWORDS_TIPO.some(k => cap.includes(k));
-    if (!isVendita && !isTipo) return false;
-
-    return true;
-  });
-}
-
-function postFilter(info) {
-  if (!info) return false;
-  // Scarta affitti certi
-  if (info.operazione === "affitto") return false;
-  // Scarta monolocali e quadrilocali+ certi
-  if (info.tipo === "monolocale") return false;
-  if (info.tipo === "quadrilocale") return false;
-  if (info.tipo === "altro") return false;
-  // Scarta se mq certi e < 70
-  if (info.dimensione && Number(info.dimensione) > 0 && Number(info.dimensione) < 70) return false;
-  // Scarta se prezzo certo e > 520k
-  if (info.prezzo && Number(info.prezzo) > 520000) return false;
-  // Zona: se estratta e NON è Milano generica, controlla — ma non scartare se zona mancante
-  // (molti post IG non menzionano zona esplicitamente)
-  return true;
-}
-
 async function fetchApifyDataset(datasetId, apiKey) {
   const url = `https://api.apify.com/v2/datasets/${datasetId}/items?format=json&clean=true&token=${apiKey}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Apify error: ${res.status}`);
   const data = await res.json();
   const all = data.filter(item => !item.error && item.caption);
-  const filtered = preFilter(all);
-  return { all: all.length, filtered };
+  return { total: all.length, filtered: preFilter(all) };
 }
 
-function analyzeCaption(caption) {
+
+// ── FILTRI TARGET ─────────────────────────────────────────────────
+const KEYWORDS_STOP = ["affitto","in affitto","locazione","affittasi","si affitta","appartamento in affitto"];
+const KEYWORDS_OK   = ["bilocale","trilocale","tre locali","due locali","2 locali","3 locali","vendo","vendita","proponiamo in vendita","cedesi"];
+
+function preFilter(items) {
+  return items.filter(item => {
+    if (!item.caption) return false;
+    const cap = item.caption.toLowerCase();
+    if (KEYWORDS_STOP.some(k => cap.includes(k))) return false;
+    if (!KEYWORDS_OK.some(k => cap.includes(k))) return false;
+    return true;
+  });
+}
+
+function postFilter(info) {
+  if (!info) return false;
+  if (info.operazione === "affitto") return false;
+  if (info.tipo === "monolocale" || info.tipo === "quadrilocale") return false;
+  if (info.dimensione && Number(info.dimensione) < 70) return false;
+  if (info.prezzo && Number(info.prezzo) > 520000) return false;
+  return true;
+}
+
+function parseCaption(caption) {
   const c = caption || "";
   const cl = c.toLowerCase();
 
-  // TIPO
   let tipo = "altro";
-  if (/mono\s*locale|monolocale|1\s*locale|1\s*vano/i.test(c)) tipo = "monolocale";
-  else if (/bi\s*locale|bilocale|due\s*local|2\s*local|2\s*vani/i.test(c)) tipo = "bilocale";
-  else if (/tri\s*locale|trilocale|tre\s*local|3\s*local|3\s*vani/i.test(c)) tipo = "trilocale";
-  else if (/quadri\s*locale|quadrilocale|quattro\s*local|4\s*local|4\s*vani/i.test(c)) tipo = "quadrilocale";
+  if (/monolocale|mono locale|1 locale|1 vano/i.test(c)) tipo = "monolocale";
+  else if (/bilocale|bi locale|due locali|2 locali|2 vani/i.test(c)) tipo = "bilocale";
+  else if (/trilocale|tri locale|tre locali|3 locali|3 vani/i.test(c)) tipo = "trilocale";
+  else if (/quadrilocale|quattro locali|4 locali|4 vani/i.test(c)) tipo = "quadrilocale";
 
-  // OPERAZIONE
   let operazione = "vendita";
-  if (/affitto|affittasi|si affitta|locazione|rent|affittare/i.test(c)) operazione = "affitto";
+  if (/affitto|affittasi|locazione|rent/i.test(c)) operazione = "affitto";
 
-  // PREZZO — cerca pattern tipo 380.000€ / €380000 / 380k / 380.000 euro
   let prezzo = null;
-  const pricePatterns = [
-    /€\s*([\d]{2,3}[\.\s]?[\d]{3})/,
-    /([\d]{2,3}[\.\s]?[\d]{3})\s*€/,
-    /([\d]{2,3}[\.\s]?[\d]{3})\s*euro/i,
-    /prezzo[:\s]*([\d]{2,3}[\.\s]?[\d]{3})/i,
-    /([\d]{2,3})[.,]?([\d]{3})\s*€/,
-    /([\d]{2,3})\s*k/i,
-  ];
-  for (const re of pricePatterns) {
-    const m = c.match(re);
+  const pm1 = c.match(/[€]\s*(\d[\d\s.,']*\d)/);
+  const pm2 = c.match(/(\d[\d\s.,']*\d)\s*[€]/);
+  const pm3 = c.match(/(\d{2,3})\s*k/i);
+  for (const m of [pm1, pm2]) {
     if (m) {
-      if (re.toString().includes("k")) {
-        prezzo = parseInt(m[1]) * 1000;
-      } else {
-        const raw = (m[1] + (m[2]||"")).replace(/[\s.]/g,"");
-        prezzo = parseInt(raw);
-      }
-      if (prezzo > 30000 && prezzo < 5000000) break;
-      prezzo = null;
+      const n = parseInt(m[1].replace(/[\s.,]/g,""));
+      if (n > 30000 && n < 5000000) { prezzo = n; break; }
     }
   }
+  if (!prezzo && pm3) { prezzo = parseInt(pm3[1]) * 1000; }
 
-  // MQ — cerca pattern tipo 85 mq / 85m² / 120 metri
   let dimensione = null;
-  const mqMatch = c.match(/(\d{2,3})\s*(?:mq|m²|m2|metri\s*quadr|metri\s*q)/i);
-  if (mqMatch) dimensione = parseInt(mqMatch[1]);
+  const mm = c.match(/(\d{2,3})\s*(?:mq|m2|m²|metri)/i);
+  if (mm) dimensione = parseInt(mm[1]);
 
-  // PIANO
   let piano = null;
-  const pianoMatch = c.match(/(\d+)[°ºo]?\s*piano|piano\s*(\d+)[°ºo]?|piano\s*(terra|rialzato|alto)/i);
-  if (pianoMatch) piano = pianoMatch[0].trim().slice(0,30);
+  const pm = c.match(/(\d+)[°º]?\s*piano|piano\s*(terra|rialzato)/i);
+  if (pm) piano = pm[0].slice(0,25);
 
-  // CONDIZIONI
   let condizioni = "Buono";
-  if (/ristrutturato|ottimo stato|ottimamente|perfetto stato|nuovo|appena ristrutturato/i.test(c)) condizioni = "Ottimo";
-  else if (/da ristrutturare|da rinnovare|da rivedere|abitabile ma|richiede lavori|lavori necessari/i.test(c)) condizioni = "Da ristrutturare";
+  if (/ristrutturato|ottimo stato|nuovo|appena ristrutturato/i.test(c)) condizioni = "Ottimo";
+  else if (/da ristrutturare|da rinnovare|richiede lavori/i.test(c)) condizioni = "Da ristrutturare";
 
-  // EXTRA
   const terrazzo = /terrazzo|terrazza|balcone/i.test(c);
-  const box = /box|garage|posto auto|autorimessa/i.test(c);
-  const cantina = /cantina|ripostiglio|deposito/i.test(c);
+  const box = /garage|posto auto|autorimessa/i.test(c) || /box/i.test(c);
+  const cantina = /cantina|ripostiglio/i.test(c);
 
-  // ZONA — mappa quartieri milanesi
   const zoneMap = [
-    {keys:["città studi","cittstudi","città degli studi"], label:"Città Studi"},
-    {keys:["cadore"], label:"Cadore"},
-    {keys:["susa","argonne"], label:"Susa/Argonne"},
-    {keys:["porta romana","portaromana"], label:"Porta Romana"},
-    {keys:["isola","garibaldi"], label:"Isola / Garibaldi"},
-    {keys:["nolo","loreto","piola"], label:"Nolo"},
-    {keys:["dateo","porta venezia","portavenezia"], label:"Porta Venezia"},
-    {keys:["lambrate"], label:"Lambrate"},
-    {keys:["porta vittoria","portavittoria"], label:"Porta Vittoria"},
-    {keys:["navigli","naviglio"], label:"Navigli"},
-    {keys:["greco","turro"], label:"Greco / Turro"},
-    {keys:["repubblica"], label:"Repubblica"},
-    {keys:["niguarda"], label:"Altra zona"},
-    {keys:["brera","centro","duomo","centro storico"], label:"Centro Storico"},
+    {k:["città studi","città degli studi"], v:"Città Studi"},
+    {k:["cadore"], v:"Cadore"},
+    {k:["susa","argonne"], v:"Susa/Argonne"},
+    {k:["porta romana"], v:"Porta Romana"},
+    {k:["isola","garibaldi"], v:"Isola / Garibaldi"},
+    {k:["nolo","loreto"], v:"Nolo"},
+    {k:["dateo","porta venezia"], v:"Porta Venezia"},
+    {k:["lambrate"], v:"Lambrate"},
+    {k:["navigli","naviglio"], v:"Navigli"},
+    {k:["greco","turro"], v:"Greco / Turro"},
   ];
   let zona = null;
   for (const z of zoneMap) {
-    if (z.keys.some(k => cl.includes(k))) { zona = z.label; break; }
+    if (z.k.some(k => cl.includes(k))) { zona = z.v; break; }
   }
 
-  // CONTATTO — telefono o email
   let contatto = null;
-  const telMatch = c.match(/(?:\+39\s?)?(?:0\d[\s.]?\d{3,4}[\s.]?\d{3,4}|3\d{2}[\s.]?\d{3}[\s.]?\d{4})/);
-  const emailMatch = c.match(/[\w.+-]+@[\w-]+\.[a-z]{2,}/i);
-  if (telMatch) contatto = telMatch[0].trim();
-  else if (emailMatch) contatto = emailMatch[0];
+  const tel = c.match(/3\d{2}[\s.]?\d{3}[\s.]?\d{4}/);
+  const email = c.match(/[\w.+-]+@[\w-]+\.[a-z]{2,}/i);
+  if (tel) contatto = tel[0].trim();
+  else if (email) contatto = email[0];
 
-  // TITOLO sintetico
-  const tipoLabel = tipo !== "altro" ? tipo : "appartamento";
-  const zonaLabel = zona ? ` · ${zona}` : "";
-  const prezzoLabel = prezzo ? ` · ${fmt(prezzo)}` : "";
-  const mqLabel = dimensione ? ` · ${dimensione}mq` : "";
-  const titolo = `${tipoLabel.charAt(0).toUpperCase()+tipoLabel.slice(1)}${zonaLabel}${mqLabel}${prezzoLabel}`;
+  const tipoLabel = tipo !== "altro" ? tipo : "immobile";
+  const titolo = tipoLabel.charAt(0).toUpperCase()+tipoLabel.slice(1) +
+    (zona ? " · "+zona : "") +
+    (dimensione ? " · "+dimensione+"mq" : "") +
+    (prezzo ? " · €"+Number(prezzo).toLocaleString("it-IT") : "");
 
-  // NOTE — prime 80 char della caption non già estratte
-  const note = c.slice(0, 80).replace(/
-/g," ").trim();
+  const note = c.slice(0,80).replace(/\n/g," ");
 
-  return { titolo, tipo, operazione, prezzo, dimensione, zona, piano, condizioni, terrazzo, box, cantina, contatto, note };
+  return {titolo, tipo, operazione, prezzo, dimensione, zona, piano, condizioni, terrazzo, box, cantina, contatto, note};
 }
 
 function IGScraperTab({onSaveToAnnunci}) {
   const [posts, setPosts] = useState([]);
   const [totalRaw, setTotalRaw] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [analyzeProgress, setAnalyzeProgress] = useState(0);
   const [analyzed, setAnalyzed] = useState({});
   const [discarded, setDiscarded] = useState({});
   const [saved, setSaved] = useState({});
+  const [analyzing, setAnalyzing] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [error, setError] = useState(null);
+  const [showDiscard, setShowDiscard] = useState(false);
   const [datasetId, setDatasetId] = useState(APIFY_DATASET_ID);
   const [apiKey, setApiKey] = useState(localStorage.getItem("apify_key") || "");
-  const [showDiscarded, setShowDiscarded] = useState(false);
 
-  const saveKey = (k) => { setApiKey(k); localStorage.setItem("apify_key", k); };
+  const saveKey = k => { setApiKey(k); localStorage.setItem("apify_key", k); };
 
   const loadPosts = async () => {
-    if (!apiKey) { setError("Inserisci la tua Apify API key."); return; }
-    setLoading(true); setError(null); setPosts([]); setAnalyzed({}); setDiscarded({}); setSaved({}); setAnalyzeProgress(0);
+    if (!apiKey) { setError("Inserisci la Apify API key."); return; }
+    setLoading(true); setError(null); setPosts([]); setAnalyzed({}); setDiscarded({}); setSaved({}); setProgress(0);
     try {
-      const result = await fetchApifyDataset(datasetId, apiKey);
-      setTotalRaw(result.all);
-      setPosts(result.filtered);
+      const res = await fetchApifyDataset(datasetId, apiKey);
+      setTotalRaw(res.total);
+      setPosts(res.filtered);
     } catch(e) { setError(e.message); }
     setLoading(false);
   };
 
-  const analyzeAll = async (postsToAnalyze) => {
+  const runAnalysis = async () => {
+    const todo = posts.filter(p => !analyzed[p.id||p.url] && !discarded[p.id||p.url]);
     setAnalyzing(true);
-    setAnalyzeProgress(0);
-    const results = {};
-    const disc = {};
-    for (let i = 0; i < postsToAnalyze.length; i++) {
-      const post = postsToAnalyze[i];
+    setProgress(0);
+    const ok = {};
+    const ko = {};
+    for (let i = 0; i < todo.length; i++) {
+      const post = todo[i];
       const key = post.id || post.url;
-      if (analyzed[key] || discarded[key]) { setAnalyzeProgress(i+1); continue; }
       try {
-        const parsed = analyzeCaption(post.caption);
-        if (parsed) {
-          if (postFilter(parsed)) results[key] = parsed;
-          else disc[key] = parsed;
-        }
+        const info = parseCaption(post.caption);
+        if (postFilter(info)) ok[key] = info;
+        else ko[key] = info;
       } catch(e) {}
-      setAnalyzeProgress(i+1);
-      // yield to React every 5 posts so UI updates
-      if (i % 5 === 4) {
-        setAnalyzed(prev => ({...prev, ...results}));
-        setDiscarded(prev => ({...prev, ...disc}));
-        await new Promise(r => setTimeout(r, 50));
-      }
+      setProgress(i + 1);
+      if (i % 10 === 9) await new Promise(r => setTimeout(r, 10));
     }
-    setAnalyzed(prev => ({...prev, ...results}));
-    setDiscarded(prev => ({...prev, ...disc}));
+    setAnalyzed(prev => ({...prev, ...ok}));
+    setDiscarded(prev => ({...prev, ...ko}));
     setAnalyzing(false);
   };
 
-  const salvaAnnuncio = async (post, info) => {
+  const salva = async (post, info) => {
     const key = post.id || post.url;
-    const zoneMap = {"Città Studi":"Città Studi","Cadore":"Cadore","Susa/Argonne":"Susa","Porta Romana":"Porta Romana","Isola / Garibaldi":"Isola / Garibaldi","Nolo":"Nolo","Dateo":"Porta Venezia","Lambrate":"Lambrate"};
-    const zonaFound = Object.entries(zoneMap).find(([k]) => info.zona?.toLowerCase().includes(k.toLowerCase()));
-    const annuncio = {
-      titolo: info.titolo || post.caption?.slice(0,60) || "Post IG",
-      zona: zonaFound ? zonaFound[0] : (info.zona || "Altra zona"),
+    const vaniMap = {bilocale:"2", trilocale:"3", monolocale:"1", quadrilocale:"4"};
+    const zoneAppMap = {"Città Studi":"Città Studi","Cadore":"Cadore","Susa/Argonne":"Susa","Porta Romana":"Porta Romana","Isola / Garibaldi":"Isola / Garibaldi","Nolo":"Nolo","Porta Venezia":"Porta Venezia","Lambrate":"Lambrate","Navigli":"Navigli","Greco / Turro":"Greco / Turro"};
+    await onSaveToAnnunci({
+      titolo: info.titolo || "Post IG",
+      zona: zoneAppMap[info.zona] || info.zona || "Altra zona",
       indirizzo: "",
       fonte: "Instagram",
       prezzo: info.prezzo ? String(info.prezzo) : "",
       dimensione: info.dimensione ? String(info.dimensione) : "",
-      vani: info.tipo==="bilocale"?"2":info.tipo==="trilocale"?"3":"",
+      vani: vaniMap[info.tipo] || "",
       piano: info.piano || "",
       condizioni: info.condizioni || "Buono",
-      terrazzo: info.terrazzo || false,
-      box: info.box || false,
-      cantina: info.cantina || false,
+      terrazzo: !!info.terrazzo,
+      box: !!info.box,
+      cantina: !!info.cantina,
       voto: 3,
-      note: `${info.contatto ? "📞 "+info.contatto+" · " : ""}${info.note || ""}`.slice(0,200),
+      note: (info.contatto ? "📞 "+info.contatto+" · " : "") + (info.note||"").slice(0,150),
       link: post.url || "",
-    };
-    await onSaveToAnnunci(annuncio);
+    });
     setSaved(prev => ({...prev, [key]: true}));
   };
 
-  const passedPosts = posts.filter(p => analyzed[p.id || p.url]);
-  const pendingPosts = posts.filter(p => !analyzed[p.id || p.url] && !discarded[p.id || p.url]);
+  const passedPosts = posts.filter(p => analyzed[p.id||p.url]);
+  const pendingCount = posts.filter(p => !analyzed[p.id||p.url] && !discarded[p.id||p.url]).length;
   const discardedCount = Object.keys(discarded).length;
-  const cardStyle = {background:"#8B3214",borderRadius:12,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,.25)",display:"flex",flexDirection:"column"};
 
-  const renderCard = (post, info, isSaved) => {
-    const key = post.id || post.url;
-    return (
-      <div key={key} style={cardStyle}>
-        {post.displayUrl && (
-          <div style={{height:150,overflow:"hidden",flexShrink:0}}>
-            <img src={post.displayUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>{e.target.style.display="none"}}/>
-          </div>
-        )}
-        <div style={{padding:14,display:"flex",flexDirection:"column",gap:8,flex:1}}>
-          {info ? (
-            <>
-              <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>
-                <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:20,background:"#833AB4",color:"#FAF0E6"}}>{info.tipo}</span>
-                {info.condizioni && <CondBadge cond={info.condizioni}/>}
-              </div>
-              <div style={{fontSize:13,fontWeight:700,fontFamily:"Playfair Display,Georgia,serif",color:"#FAF0E6",lineHeight:1.3}}>{info.titolo}</div>
-              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                {info.prezzo && <Chip bg="#B5921B">{fmt(info.prezzo)}</Chip>}
-                {info.dimensione && <Chip bg="#B5921B">{fmtM(info.dimensione)}</Chip>}
-                {info.zona && <Chip>📍 {info.zona}</Chip>}
-              </div>
-              <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                {info.terrazzo && <Chip bg="#d1fae5" color="#065f46">🌿 Terrazzo</Chip>}
-                {info.box && <Chip bg="#e0e7ff" color="#3730a3">🚗 Box</Chip>}
-                {info.cantina && <Chip bg="#fef9c3" color="#713f12">📦 Cantina</Chip>}
-                {info.contatto && <Chip bg="#1e3a5f" color="#bfdbfe">📞 {info.contatto.slice(0,18)}</Chip>}
-              </div>
-              {info.note && <div style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",opacity:.8,lineHeight:1.4}}>💬 {info.note}</div>}
-            </>
-          ) : (
-            <div style={{fontSize:12,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",lineHeight:1.5,flex:1}}>
-              {post.caption?.slice(0,130)}{post.caption?.length>130?"…":""}
-            </div>
-          )}
-          <div style={{display:"flex",gap:8,marginTop:"auto",paddingTop:8,borderTop:"1px solid rgba(255,255,255,.15)"}}>
-            <a href={post.url} target="_blank" rel="noopener noreferrer"
-              style={{fontSize:12,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",textDecoration:"none",fontWeight:700,flex:1}}>IG →</a>
-            {!info && <button onClick={()=>analyzeAll([post])}
-              style={{...btn,background:"#6d28d9",padding:"5px 10px",fontSize:11}}>🔍 Analizza</button>}
-            {info && !isSaved && <button onClick={()=>salvaAnnuncio(post, info)}
-              style={{...btn,padding:"5px 12px",fontSize:11}}>＋ Salva</button>}
-            {isSaved && <span style={{fontSize:12,fontFamily:"Courier Prime,Courier New,monospace",color:"#7EC87E",fontWeight:700}}>✓ Salvato</span>}
-          </div>
+  const Card = ({post, info, isSaved, dim}) => (
+    <div style={{background: dim?"#6B2810":"#8B3214", borderRadius:12, overflow:"hidden", boxShadow:"0 2px 8px rgba(0,0,0,.25)", display:"flex", flexDirection:"column", opacity: dim?.7:1}}>
+      {post.displayUrl && (
+        <div style={{height:140, overflow:"hidden", flexShrink:0}}>
+          <img src={post.displayUrl} alt="" style={{width:"100%", height:"100%", objectFit:"cover"}} onError={e=>{e.target.style.display="none"}}/>
+        </div>
+      )}
+      <div style={{padding:12, display:"flex", flexDirection:"column", gap:8, flex:1}}>
+        <div style={{display:"flex", gap:5, flexWrap:"wrap"}}>
+          {info.tipo && info.tipo !== "altro" && <span style={{fontSize:11, fontWeight:700, padding:"2px 8px", borderRadius:20, background:"#833AB4", color:"#FAF0E6"}}>{info.tipo}</span>}
+          <CondBadge cond={info.condizioni}/>
+          {info.operazione === "affitto" && <span style={{fontSize:10, padding:"2px 6px", borderRadius:4, background:"#dc2626", color:"white"}}>affitto</span>}
+        </div>
+        <div style={{fontSize:12, fontWeight:700, fontFamily:"Playfair Display,serif", color:"#FAF0E6", lineHeight:1.3}}>{info.titolo}</div>
+        <div style={{display:"flex", gap:5, flexWrap:"wrap"}}>
+          {info.prezzo && <Chip bg="#B5921B">{fmt(info.prezzo)}</Chip>}
+          {info.dimensione && <Chip bg="#B5921B">{fmtM(info.dimensione)}</Chip>}
+          {info.zona && <Chip>📍 {info.zona}</Chip>}
+        </div>
+        <div style={{display:"flex", gap:4, flexWrap:"wrap"}}>
+          {info.terrazzo && <Chip bg="#d1fae5" color="#065f46">🌿 Terrazzo</Chip>}
+          {info.box && <Chip bg="#e0e7ff" color="#3730a3">🚗 Box</Chip>}
+          {info.cantina && <Chip bg="#fef9c3" color="#713f12">📦 Cantina</Chip>}
+          {info.contatto && <Chip bg="#1e3a5f" color="#bfdbfe">📞 {info.contatto.slice(0,18)}</Chip>}
+        </div>
+        <div style={{display:"flex", gap:8, marginTop:"auto", paddingTop:8, borderTop:"1px solid rgba(255,255,255,.15)", alignItems:"center"}}>
+          <a href={post.url} target="_blank" rel="noopener noreferrer" style={{fontSize:12, color:"#E8C9A0", textDecoration:"none", fontWeight:700, flex:1}}>IG →</a>
+          {!dim && !isSaved && <button onClick={()=>salva(post, info)} style={{...btn, padding:"5px 12px", fontSize:11}}>＋ Salva</button>}
+          {isSaved && <span style={{fontSize:11, color:"#7EC87E", fontWeight:700}}>✓ Salvato</span>}
         </div>
       </div>
-    );
-  };
+    </div>
+  );
 
   return (
-    <div style={{padding:"16px 16px 60px",maxWidth:760,margin:"0 auto"}}>
-      {/* Config */}
-      <div style={{background:"#8B3214",borderRadius:12,padding:18,marginBottom:16}}>
-        <div style={{fontFamily:"Playfair Display,Georgia,serif",fontSize:18,fontWeight:700,color:"#FAF0E6",marginBottom:6}}>📸 IG Scraper</div>
-        <div style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",marginBottom:12,lineHeight:1.5}}>
-          Filtri attivi: <b style={{color:"#fff"}}>vendita · bilocale/trilocale · ≥70mq · ≤€520k · zone target</b>
+    <div style={{padding:"16px 16px 60px", maxWidth:760, margin:"0 auto"}}>
+      <div style={{background:"#8B3214", borderRadius:12, padding:18, marginBottom:16}}>
+        <div style={{fontFamily:"Playfair Display,serif", fontSize:18, fontWeight:700, color:"#FAF0E6", marginBottom:6}}>📸 IG Scraper</div>
+        <div style={{fontSize:11, fontFamily:"Courier Prime,monospace", color:"#E8C9A0", marginBottom:12}}>
+          Filtri: <b style={{color:"#fff"}}>vendita · bilocale/trilocale · ≥70mq · ≤€520k</b>
         </div>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
-          <input style={{...fi,flex:2,minWidth:200,fontSize:12,padding:"8px 10px"}} placeholder="🔑 Apify API key" type="password" value={apiKey} onChange={e=>saveKey(e.target.value)}/>
-          {apiKey && <span style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#7EC87E",alignSelf:"center"}}>✓ key ok</span>}
+        <div style={{display:"flex", gap:8, marginBottom:8}}>
+          <input style={{...fi, flex:1, fontSize:12, padding:"8px 10px"}} type="password" placeholder="🔑 Apify API key" value={apiKey} onChange={e=>saveKey(e.target.value)}/>
+          {apiKey && <span style={{fontSize:11, color:"#7EC87E", alignSelf:"center", whiteSpace:"nowrap"}}>✓ ok</span>}
         </div>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          <input style={{...fi,flex:2,minWidth:150,fontSize:12,padding:"8px 10px"}} placeholder="Dataset ID" value={datasetId} onChange={e=>setDatasetId(e.target.value)}/>
-          <button onClick={loadPosts} disabled={loading} style={{...btn,opacity:loading?.6:1}}>
-            {loading ? "⏳ Caricamento…" : "📥 Carica"}
+        <div style={{display:"flex", gap:8}}>
+          <input style={{...fi, flex:1, fontSize:12, padding:"8px 10px"}} placeholder="Dataset ID" value={datasetId} onChange={e=>setDatasetId(e.target.value)}/>
+          <button onClick={loadPosts} disabled={loading} style={{...btn, whiteSpace:"nowrap", opacity:loading?.6:1}}>
+            {loading ? "⏳…" : "📥 Carica"}
           </button>
         </div>
       </div>
 
-      {error && <div style={{background:"#7f1d1d",borderRadius:10,padding:14,marginBottom:14,fontSize:13,fontFamily:"Courier Prime,Courier New,monospace",color:"#fca5a5"}}>⚠️ {error}</div>}
+      {error && <div style={{background:"#7f1d1d", borderRadius:10, padding:14, marginBottom:14, fontSize:13, color:"#fca5a5"}}>{error}</div>}
 
       {posts.length > 0 && (
         <>
-          {/* Pannello stato */}
-          <div style={{background:"#9B3A17",borderRadius:10,padding:"12px 16px",marginBottom:14,display:"flex",gap:20,flexWrap:"wrap",alignItems:"center"}}>
+          <div style={{background:"#9B3A17", borderRadius:10, padding:"12px 16px", marginBottom:14, display:"flex", gap:16, flexWrap:"wrap"}}>
             <Stat label="Raw Apify" val={totalRaw}/>
             <Stat label="Pre-filtrati" val={posts.length}/>
-            <Stat label="✅ Target" val={passedPosts.length}/>
+            <Stat label="✅ In target" val={passedPosts.length}/>
             <Stat label="❌ Scartati" val={discardedCount}/>
-            <Stat label="⏳ Da anal." val={pendingPosts.length}/>
+            <Stat label="⏳ Da fare" val={pendingCount}/>
           </div>
 
-          {/* Progress bar analisi */}
           {analyzing && (
-            <div style={{background:"#8B3214",borderRadius:8,padding:"10px 14px",marginBottom:12}}>
-              <div style={{fontSize:12,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",marginBottom:6}}>
-                🤖 Analisi in corso… {analyzeProgress}/{posts.length}
-              </div>
-              <div style={{background:"rgba(0,0,0,.3)",borderRadius:4,height:6}}>
-                <div style={{background:"#B5921B",borderRadius:4,height:6,width:`${(analyzeProgress/posts.length)*100}%`,transition:"width .3s"}}/>
+            <div style={{background:"#8B3214", borderRadius:8, padding:"10px 14px", marginBottom:12}}>
+              <div style={{fontSize:12, color:"#E8C9A0", marginBottom:6}}>Analisi {progress}/{posts.length}</div>
+              <div style={{background:"rgba(0,0,0,.3)", borderRadius:4, height:6}}>
+                <div style={{background:"#B5921B", borderRadius:4, height:6, width:`${(progress/posts.length)*100}%`, transition:"width .2s"}}/>
               </div>
             </div>
           )}
 
-          {/* Bottone analizza */}
-          {pendingPosts.length > 0 && !analyzing && (
-            <button onClick={()=>analyzeAll(pendingPosts)}
-              style={{...btn,background:"#6d28d9",marginBottom:14,width:"100%",padding:"12px"}}>
-              🤖 Analizza {pendingPosts.length} post pre-filtrati con AI
+          {pendingCount > 0 && !analyzing && (
+            <button onClick={runAnalysis} style={{...btn, background:"#6d28d9", width:"100%", padding:12, marginBottom:14, fontSize:14}}>
+              🔍 Analizza {pendingCount} post
             </button>
           )}
 
-          {/* Post che passano i filtri */}
           {passedPosts.length > 0 && (
             <>
-              <div style={{fontSize:12,fontWeight:700,fontFamily:"Courier Prime,Courier New,monospace",color:"#7EC87E",marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>
-                ✅ {passedPosts.length} annunci che matchano i tuoi criteri
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(270px,1fr))",gap:14,marginBottom:20}}>
-                {passedPosts.map(p => renderCard(p, analyzed[p.id||p.url], saved[p.id||p.url]))}
+              <div style={{fontSize:12, fontWeight:700, color:"#7EC87E", marginBottom:10, textTransform:"uppercase", letterSpacing:1}}>✅ {passedPosts.length} annunci in target</div>
+              <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:12, marginBottom:20}}>
+                {passedPosts.map(p => <Card key={p.id||p.url} post={p} info={analyzed[p.id||p.url]} isSaved={saved[p.id||p.url]} dim={false}/>)}
               </div>
             </>
           )}
 
-          {/* Post in attesa */}
-          {pendingPosts.length > 0 && !analyzing && (
-            <div style={{fontSize:12,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",opacity:.7,marginBottom:10}}>
-              {pendingPosts.length} post pre-filtrati in attesa di analisi AI
-            </div>
-          )}
-
-          {/* Scartati (collassabili) */}
           {discardedCount > 0 && (
-            <div style={{marginTop:8}}>
-              <button onClick={()=>setShowDiscarded(s=>!s)}
-                style={{background:"transparent",border:"1px solid rgba(255,255,255,.2)",borderRadius:8,padding:"8px 14px",fontSize:12,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",cursor:"pointer",marginBottom:10}}>
-                {showDiscarded ? "▲" : "▼"} {discardedCount} post non in target (mostra/nascondi)
+            <>
+              <button onClick={()=>setShowDiscard(s=>!s)} style={{background:"transparent", border:"1px solid rgba(255,255,255,.2)", borderRadius:8, padding:"7px 14px", fontSize:12, color:"#E8C9A0", cursor:"pointer", marginBottom:10}}>
+                {showDiscard?"▲":"▼"} {discardedCount} scartati
               </button>
-              {showDiscarded && (
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(270px,1fr))",gap:12,opacity:.5}}>
-                  {posts.filter(p=>discarded[p.id||p.url]).map(p => renderCard(p, discarded[p.id||p.url], false))}
+              {showDiscard && (
+                <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:12}}>
+                  {posts.filter(p=>discarded[p.id||p.url]).map(p => <Card key={p.id||p.url} post={p} info={discarded[p.id||p.url]} isSaved={false} dim={true}/>)}
                 </div>
               )}
-            </div>
+            </>
           )}
         </>
       )}
 
       {!loading && posts.length === 0 && !error && (
-        <div style={{textAlign:"center",padding:"50px 20px",fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0"}}>
-          <div style={{fontSize:48,marginBottom:12}}>📸</div>
-          <div style={{fontSize:16,fontWeight:700,fontFamily:"Playfair Display,Georgia,serif",color:"#FAF0E6",marginBottom:8}}>Premi Carica</div>
-          <p style={{fontSize:13,maxWidth:300,margin:"0 auto",lineHeight:1.6}}>I 214 post verranno pre-filtrati per testo. Solo quelli rilevanti andranno all'analisi AI.</p>
+        <div style={{textAlign:"center", padding:"50px 20px", color:"#E8C9A0"}}>
+          <div style={{fontSize:48, marginBottom:12}}>📸</div>
+          <div style={{fontSize:16, fontWeight:700, fontFamily:"Playfair Display,serif", color:"#FAF0E6", marginBottom:8}}>Premi Carica</div>
+          <p style={{fontSize:13, maxWidth:300, margin:"0 auto", lineHeight:1.6}}>I post vengono pre-filtrati per testo, poi analizzati localmente — nessuna API esterna.</p>
         </div>
       )}
     </div>
   );
 }
+
 
 // ── APP ──────────────────────────────────────────────────────────────
 function App(){
