@@ -222,47 +222,106 @@ async function fetchApifyDataset(datasetId, apiKey) {
   return { all: all.length, filtered };
 }
 
-async function analyzeCaption(caption, postUrl) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      messages: [{
-        role: "user",
-        content: `Analizza questa caption di un post Instagram immobiliare milanese. Estrai le informazioni e rispondi SOLO con un oggetto JSON valido, nessun testo aggiuntivo.
+function analyzeCaption(caption) {
+  const c = caption || "";
+  const cl = c.toLowerCase();
 
-Per la zona, usa ESATTAMENTE uno di questi nomi se riconosci la zona: "Città Studi", "Cadore", "Susa/Argonne", "Porta Romana", "Isola", "Nolo", "Dateo", "Lambrate". Altrimenti metti il nome del quartiere che trovi.
+  // TIPO
+  let tipo = "altro";
+  if (/mono\s*locale|monolocale|1\s*locale|1\s*vano/i.test(c)) tipo = "monolocale";
+  else if (/bi\s*locale|bilocale|due\s*local|2\s*local|2\s*vani/i.test(c)) tipo = "bilocale";
+  else if (/tri\s*locale|trilocale|tre\s*local|3\s*local|3\s*vani/i.test(c)) tipo = "trilocale";
+  else if (/quadri\s*locale|quadrilocale|quattro\s*local|4\s*local|4\s*vani/i.test(c)) tipo = "quadrilocale";
 
-Caption: ${caption}
+  // OPERAZIONE
+  let operazione = "vendita";
+  if (/affitto|affittasi|si affitta|locazione|rent|affittare/i.test(c)) operazione = "affitto";
 
-Rispondi con questo formato esatto:
-{
-  "titolo": "titolo breve descrittivo dell'immobile",
-  "tipo": "bilocale|trilocale|monolocale|quadrilocale|altro",
-  "operazione": "vendita|affitto|altro",
-  "prezzo": numero intero senza simboli o null,
-  "dimensione": numero intero mq o null,
-  "zona": "zona di Milano o null",
-  "piano": "descrizione piano o null",
-  "condizioni": "Ottimo|Buono|Da ristrutturare",
-  "terrazzo": true o false,
-  "box": true o false,
-  "cantina": true o false,
-  "contatto": "telefono o email trovati nella caption o null",
-  "note": "altre info utili in max 80 caratteri"
-}`
-      }]
-    })
-  });
-  const data = await res.json();
-  const text = data.content?.[0]?.text || "{}";
-  try {
-    return JSON.parse(text.replace(/```json|```/g,"").trim());
-  } catch(e) {
-    return null;
+  // PREZZO — cerca pattern tipo 380.000€ / €380000 / 380k / 380.000 euro
+  let prezzo = null;
+  const pricePatterns = [
+    /€\s*([\d]{2,3}[\.\s]?[\d]{3})/,
+    /([\d]{2,3}[\.\s]?[\d]{3})\s*€/,
+    /([\d]{2,3}[\.\s]?[\d]{3})\s*euro/i,
+    /prezzo[:\s]*([\d]{2,3}[\.\s]?[\d]{3})/i,
+    /([\d]{2,3})[.,]?([\d]{3})\s*€/,
+    /([\d]{2,3})\s*k/i,
+  ];
+  for (const re of pricePatterns) {
+    const m = c.match(re);
+    if (m) {
+      if (re.toString().includes("k")) {
+        prezzo = parseInt(m[1]) * 1000;
+      } else {
+        const raw = (m[1] + (m[2]||"")).replace(/[\s.]/g,"");
+        prezzo = parseInt(raw);
+      }
+      if (prezzo > 30000 && prezzo < 5000000) break;
+      prezzo = null;
+    }
   }
+
+  // MQ — cerca pattern tipo 85 mq / 85m² / 120 metri
+  let dimensione = null;
+  const mqMatch = c.match(/(\d{2,3})\s*(?:mq|m²|m2|metri\s*quadr|metri\s*q)/i);
+  if (mqMatch) dimensione = parseInt(mqMatch[1]);
+
+  // PIANO
+  let piano = null;
+  const pianoMatch = c.match(/(\d+)[°ºo]?\s*piano|piano\s*(\d+)[°ºo]?|piano\s*(terra|rialzato|alto)/i);
+  if (pianoMatch) piano = pianoMatch[0].trim().slice(0,30);
+
+  // CONDIZIONI
+  let condizioni = "Buono";
+  if (/ristrutturato|ottimo stato|ottimamente|perfetto stato|nuovo|appena ristrutturato/i.test(c)) condizioni = "Ottimo";
+  else if (/da ristrutturare|da rinnovare|da rivedere|abitabile ma|richiede lavori|lavori necessari/i.test(c)) condizioni = "Da ristrutturare";
+
+  // EXTRA
+  const terrazzo = /terrazzo|terrazza|balcone/i.test(c);
+  const box = /box|garage|posto auto|autorimessa/i.test(c);
+  const cantina = /cantina|ripostiglio|deposito/i.test(c);
+
+  // ZONA — mappa quartieri milanesi
+  const zoneMap = [
+    {keys:["città studi","cittstudi","città degli studi"], label:"Città Studi"},
+    {keys:["cadore"], label:"Cadore"},
+    {keys:["susa","argonne"], label:"Susa/Argonne"},
+    {keys:["porta romana","portaromana"], label:"Porta Romana"},
+    {keys:["isola","garibaldi"], label:"Isola / Garibaldi"},
+    {keys:["nolo","loreto","piola"], label:"Nolo"},
+    {keys:["dateo","porta venezia","portavenezia"], label:"Porta Venezia"},
+    {keys:["lambrate"], label:"Lambrate"},
+    {keys:["porta vittoria","portavittoria"], label:"Porta Vittoria"},
+    {keys:["navigli","naviglio"], label:"Navigli"},
+    {keys:["greco","turro"], label:"Greco / Turro"},
+    {keys:["repubblica"], label:"Repubblica"},
+    {keys:["niguarda"], label:"Altra zona"},
+    {keys:["brera","centro","duomo","centro storico"], label:"Centro Storico"},
+  ];
+  let zona = null;
+  for (const z of zoneMap) {
+    if (z.keys.some(k => cl.includes(k))) { zona = z.label; break; }
+  }
+
+  // CONTATTO — telefono o email
+  let contatto = null;
+  const telMatch = c.match(/(?:\+39\s?)?(?:0\d[\s.]?\d{3,4}[\s.]?\d{3,4}|3\d{2}[\s.]?\d{3}[\s.]?\d{4})/);
+  const emailMatch = c.match(/[\w.+-]+@[\w-]+\.[a-z]{2,}/i);
+  if (telMatch) contatto = telMatch[0].trim();
+  else if (emailMatch) contatto = emailMatch[0];
+
+  // TITOLO sintetico
+  const tipoLabel = tipo !== "altro" ? tipo : "appartamento";
+  const zonaLabel = zona ? ` · ${zona}` : "";
+  const prezzoLabel = prezzo ? ` · ${fmt(prezzo)}` : "";
+  const mqLabel = dimensione ? ` · ${dimensione}mq` : "";
+  const titolo = `${tipoLabel.charAt(0).toUpperCase()+tipoLabel.slice(1)}${zonaLabel}${mqLabel}${prezzoLabel}`;
+
+  // NOTE — prime 80 char della caption non già estratte
+  const note = c.slice(0, 80).replace(/
+/g," ").trim();
+
+  return { titolo, tipo, operazione, prezzo, dimensione, zona, piano, condizioni, terrazzo, box, cantina, contatto, note };
 }
 
 function IGScraperTab({onSaveToAnnunci}) {
@@ -292,29 +351,23 @@ function IGScraperTab({onSaveToAnnunci}) {
     setLoading(false);
   };
 
-  const analyzeAll = async (postsToAnalyze) => {
+  const analyzeAll = (postsToAnalyze) => {
     setAnalyzing(true);
     setAnalyzeProgress(0);
     const results = {};
     const disc = {};
-    for (let i = 0; i < postsToAnalyze.length; i++) {
-      const post = postsToAnalyze[i];
+    postsToAnalyze.forEach((post, i) => {
       const key = post.id || post.url;
-      if (analyzed[key]) { setAnalyzeProgress(i+1); continue; }
+      if (analyzed[key]) { setAnalyzeProgress(i+1); return; }
       try {
-        const parsed = await analyzeCaption(post.caption, post.url);
+        const parsed = analyzeCaption(post.caption);
         if (parsed) {
-          if (postFilter(parsed)) {
-            results[key] = parsed;
-          } else {
-            disc[key] = parsed;
-          }
+          if (postFilter(parsed)) results[key] = parsed;
+          else disc[key] = parsed;
         }
       } catch(e) {}
       setAnalyzeProgress(i+1);
-      // small pause to avoid rate limiting
-      await new Promise(r => setTimeout(r, 200));
-    }
+    });
     setAnalyzed(prev => ({...prev, ...results}));
     setDiscarded(prev => ({...prev, ...disc}));
     setAnalyzing(false);
@@ -388,8 +441,8 @@ function IGScraperTab({onSaveToAnnunci}) {
           <div style={{display:"flex",gap:8,marginTop:"auto",paddingTop:8,borderTop:"1px solid rgba(255,255,255,.15)"}}>
             <a href={post.url} target="_blank" rel="noopener noreferrer"
               style={{fontSize:12,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",textDecoration:"none",fontWeight:700,flex:1}}>IG →</a>
-            {!info && <button onClick={()=>analyzeAll([post])} disabled={analyzing}
-              style={{...btn,background:"#6d28d9",padding:"5px 10px",fontSize:11,opacity:analyzing?.5:1}}>🤖 Analizza</button>}
+            {!info && <button onClick={()=>analyzeAll([post])}
+              style={{...btn,background:"#6d28d9",padding:"5px 10px",fontSize:11}}>🔍 Analizza</button>}
             {info && !isSaved && <button onClick={()=>salvaAnnuncio(post, info)}
               style={{...btn,padding:"5px 12px",fontSize:11}}>＋ Salva</button>}
             {isSaved && <span style={{fontSize:12,fontFamily:"Courier Prime,Courier New,monospace",color:"#7EC87E",fontWeight:700}}>✓ Salvato</span>}
