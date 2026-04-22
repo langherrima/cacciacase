@@ -197,16 +197,18 @@ function preFilter(items) {
 
 function postFilter(info) {
   if (!info) return false;
+  // Scarta affitti certi
   if (info.operazione === "affitto") return false;
-  if (!["bilocale","trilocale"].includes(info.tipo)) return false;
-  if (info.dimensione && Number(info.dimensione) < 70) return false;
+  // Scarta monolocali e quadrilocali+ certi
+  if (info.tipo === "monolocale") return false;
+  if (info.tipo === "quadrilocale") return false;
+  if (info.tipo === "altro") return false;
+  // Scarta se mq certi e < 70
+  if (info.dimensione && Number(info.dimensione) > 0 && Number(info.dimensione) < 70) return false;
+  // Scarta se prezzo certo e > 520k
   if (info.prezzo && Number(info.prezzo) > 520000) return false;
-  // zona: se estratta, deve essere nelle target (se non estratta lasciamo passare)
-  if (info.zona) {
-    const z = info.zona.toLowerCase();
-    const match = TARGET_ZONE.some(t => z.includes(t));
-    if (!match) return false;
-  }
+  // Zona: se estratta e NON è Milano generica, controlla — ma non scartare se zona mancante
+  // (molti post IG non menzionano zona esplicitamente)
   return true;
 }
 
