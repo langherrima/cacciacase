@@ -173,7 +173,7 @@ function MapView({listings}){
 
 // ── IG SCRAPER ───────────────────────────────────────────────────────
 async function fetchApifyDataset(datasetId, apiKey) {
-  const url = `https://api.apify.com/v2/datasets/${datasetId}/items?format=json&clean=true&token=${apiKey}`;
+  const url = `https://api.apify.com/v2/datasets/${datasetId}/items?format=json&clean=true&token=${apiKey}&fields=caption,url,displayUrl,id,timestamp&createdAtFrom=2026-04-01T00%3A00%3A00.000Z`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Apify error: ${res.status}`);
   const data = await res.json();
@@ -186,15 +186,15 @@ async function fetchApifyDataset(datasetId, apiKey) {
 const KEYWORDS_STOP = ["affitto","in affitto","locazione","affittasi","si affitta","appartamento in affitto"];
 const KEYWORDS_OK   = ["bilocale","trilocale","tre locali","due locali","2 locali","3 locali","vendo","vendita","proponiamo in vendita","cedesi"];
 
-const DATE_FROM = new Date("2026-04-01T00:00:00Z");
+const DATE_FROM = new Date("2025-01-01T00:00:00Z");
 
 function preFilter(items) {
   return items.filter(item => {
     if (!item.caption) return false;
-    // Filtro data: solo post dal 1 aprile 2026
+    // Scarta post precedenti al 2025
     if (item.timestamp) {
       const d = new Date(item.timestamp);
-      if (d < DATE_FROM) return false;
+      if (!isNaN(d.getTime()) && d < DATE_FROM) return false;
     }
     const cap = item.caption.toLowerCase();
     if (KEYWORDS_STOP.some(k => cap.includes(k))) return false;
