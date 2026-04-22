@@ -275,7 +275,7 @@ function parseCaption(caption) {
     (dimensione ? " · "+dimensione+"mq" : "") +
     (prezzo ? " · €"+Number(prezzo).toLocaleString("it-IT") : "");
 
-  const note = c.slice(0,80).replace(/\n/g," ");
+  const note = c.slice(0,80).split("\n").join(" ");
 
   return {titolo, tipo, operazione, prezzo, dimensione, zona, piano, condizioni, terrazzo, box, cantina, contatto, note};
 }
