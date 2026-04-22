@@ -24,13 +24,14 @@
       messagingSenderId: "775563837811",
       appId: "1:775563837811:web:8967d71ba7c2698f808506"
     });
-    const _db  = firebase.firestore();
-    const _col = _db.collection("annunci");
+    const _db       = firebase.firestore();
+    const _col      = _db.collection("annunci");
+    const _serverTs = firebase.firestore.FieldValue.serverTimestamp;
     window.__db = {
       subscribe: (cb) => _col.onSnapshot(snap => {
         cb(snap.docs.map(d => ({...d.data(), _id: d.id})));
       }),
-      add:    (data)     => _col.add({...data, _ts: firebase.firestore.FieldValue.serverTimestamp()}),
+      add:    (data)     => _col.add({...data, _ts: _serverTs()}),
       update: (id, data) => { const {_id,_ts,...rest}=data; return _col.doc(id).update(rest); },
       remove: (id)       => _col.doc(id).delete(),
     };
@@ -209,13 +210,27 @@ function MapTab({ listings }) {
     const withCoords = listings.filter(l => l.lat && l.lng);
 
     withCoords.forEach(l => {
+      const color = COND[l.condizioni] || "#888";
+      const icon = L.divIcon({
+        className: "",
+        html: `<div style="
+          width:22px;height:22px;border-radius:50% 50% 50% 0;
+          background:${color};border:2.5px solid #fff;
+          transform:rotate(-45deg);
+          box-shadow:0 2px 8px rgba(0,0,0,.45);
+        "></div>`,
+        iconSize:   [22, 22],
+        iconAnchor: [11, 22],
+        popupAnchor:[0, -24],
+      });
       const popupHtml = `
         <b>${l.titolo || "Senza titolo"}</b><br>
         📍 ${[l.zona, l.indirizzo].filter(Boolean).join(" · ")}<br>
-        ${fmt(l.prezzo)}${l.dimensione ? " · " + fmtM(l.dimensione) : ""}
+        ${fmt(l.prezzo)}${l.dimensione ? " · " + fmtM(l.dimensione) : ""}<br>
+        <span style="font-size:11px;color:${color};font-weight:700">${l.condizioni || ""}</span>
         ${l.link ? `<a href="${l.link}" target="_blank" class="popup-link">Vedi annuncio →</a>` : ""}
       `;
-      L.marker([l.lat, l.lng])
+      L.marker([l.lat, l.lng], { icon })
         .addTo(map)
         .bindPopup(popupHtml, { maxWidth: 220 });
     });
@@ -241,12 +256,19 @@ function MapTab({ listings }) {
   return (
     <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 100px)"}}>
       <div ref={containerRef} style={{flex:1,minHeight:0}} />
-      {noCoords > 0 && (
-        <div style={{padding:"10px 16px",background:"#9B3A17",fontSize:12,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",lineHeight:1.5}}>
-          ⚠️ {noCoords} annuncio{noCoords>1?"i":""} senza coordinate.
-          Riaprili con ✏️ e risalva per geocodificarli.
-        </div>
-      )}
+      <div style={{padding:"10px 16px",background:"#9B3A17",display:"flex",flexWrap:"wrap",gap:14,alignItems:"center"}}>
+        {Object.entries({"Ottimo":"#16a34a","Buono":"#b45309","Da ristrutturare":"#dc2626"}).map(([label,color])=>(
+          <div key={label} style={{display:"flex",alignItems:"center",gap:6}}>
+            <div style={{width:13,height:13,borderRadius:"50%",background:color,border:"2px solid #fff",flexShrink:0}}/>
+            <span style={{fontSize:12,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0"}}>{label}</span>
+          </div>
+        ))}
+        {noCoords > 0 && (
+          <span style={{fontSize:12,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",opacity:.7,marginLeft:"auto"}}>
+            ⚠️ {noCoords} senza posizione — riaprili con ✏️ e risalva
+          </span>
+        )}
+      </div>
     </div>
   );
 }
