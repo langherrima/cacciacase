@@ -151,11 +151,11 @@ function parseEmail(rawText) {
 
   // Fonte rilevata dall'intestazione
   const detectSource = () => {
-    const head = lines.slice(0, 10).join(' ').toLowerCase();
-    if (head.includes('immobiliare')) return 'Immobiliare.it';
-    if (head.includes('idealista'))  return 'Idealista';
-    if (head.includes('casa.it'))    return 'Casa.it';
-    return 'Altro';
+    const full = lines.join(' ').toLowerCase();
+    if (full.includes('immobiliare.it') || full.includes('notifiche.immobiliare')) return 'Immobiliare.it';
+    if (full.includes('idealista'))  return 'Idealista';
+    if (full.includes('casa.it'))    return 'Casa.it';
+    return 'Immobiliare.it'; // default più comune
   };
   const fonte = detectSource();
 
@@ -168,7 +168,10 @@ function parseEmail(rawText) {
     if (seen.has(key)) return;
     seen.add(key);
     const { zonaRaw, ...rest } = obj;
-    results.push({ ...DEFAULTS, fonte, ...rest, zona: mapZona(zonaRaw || '') });
+    const street = streetFromTitle(rest.titolo);
+    const indirizzo = street; // salva nel campo indirizzo per la mappa
+    const link = searchUrl(fonte, street, zonaRaw); // link di ricerca (non diretto)
+    results.push({ ...DEFAULTS, fonte, indirizzo, link, ...rest, zonaRaw, zona: mapZona(zonaRaw || '') });
   };
 
   const prevNoise = (i) => NOISE.test(lines[i] || '');
@@ -182,6 +185,21 @@ function parseEmail(rawText) {
       if (c.length >= 4 && c.length <= 250) return { val: c, idx: j };
     }
     return { val: '', idx: -1 };
+  };
+
+  // Estrae indirizzo stradale dal titolo:
+  // "Bilocale in Piazzale Loreto, 5, NoLo, Milano" → "Piazzale Loreto, 5"
+  const streetFromTitle = (titolo) => {
+    const m = (titolo || '').match(/\b(via|piazza|piazzale|corso|viale|largo|vicolo|strada)\s+[^,–\-\n]{3,40}(?:,\s*\d+)?/i);
+    return m ? m[0].trim() : '';
+  };
+
+  // Genera link di ricerca sul portale con l'indirizzo pre-compilato
+  const searchUrl = (fonte, street, zonaRaw) => {
+    const q = encodeURIComponent(street || zonaRaw || 'Milano');
+    if (fonte === 'Idealista') return `https://www.idealista.it/vendita-case/milano-milano/?keywords=${q}`;
+    if (fonte === 'Casa.it')   return `https://www.casa.it/vendita/residenziale/milano/?q=${q}`;
+    return `https://www.immobiliare.it/vendita-appartamenti/milano/?q=${q}`;
   };
 
   // Estrae zona dal titolo Idealista/Casa.it:
@@ -484,7 +502,7 @@ function App(){
       const { zonaRaw, ...data } = item;
       const full = { ...EMPTY, ...data };
       // Usa indirizzo stradale estratto dal titolo se disponibile, poi la zona
-      const street = extractStreet(data.titolo);
+      const street = data.indirizzo || extractStreet(data.titolo);
       const zonaForGeo = data.zona !== 'Altra zona' ? data.zona : zonaRaw;
       const coords = await geocode(street, zonaForGeo);
       if (coords) { full.lat = coords.lat; full.lng = coords.lng; }
@@ -755,11 +773,16 @@ function App(){
                               {item.titolo}
                             </div>
                             <div style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",display:"flex",gap:10,flexWrap:"wrap"}}>
-                              <span>📍 {item.zonaRaw}</span>
+                              {item.indirizzo
+                                ? <span>📍 {item.indirizzo}</span>
+                                : <span>📍 {item.zonaRaw}</span>}
                               {item.prezzo&&<span style={{color:"#B5921B",fontWeight:700}}>{fmt(item.prezzo)}</span>}
                               {item.dimensione&&<span>{item.dimensione} m²</span>}
                               {item.vani&&<span>{item.vani} locali</span>}
                             </div>
+                            {added&&<div style={{fontSize:10,fontFamily:"Courier Prime,Courier New,monospace",color:"#7EC87E",marginTop:2}}>
+                              ✓ Salvato · <a href={item.link} target="_blank" rel="noopener" style={{color:"#B5921B"}}>Cerca su {item.fonte} →</a> poi copia il link e aggiungilo da ✏️
+                            </div>}
                           </div>
                           <button
                             disabled={added||loading}
