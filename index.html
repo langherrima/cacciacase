@@ -120,6 +120,13 @@ function mapZona(raw) {
   return "Altra zona";
 }
 
+// Estrae indirizzo stradale dal titolo annuncio:
+// "Bilocale in Piazzale Loreto, 5, NoLo, Milano" → "Piazzale Loreto, 5"
+function streetFromTitle(titolo) {
+  const m = (titolo || '').match(/\b(via|piazza|piazzale|corso|viale|largo|vicolo|strada)\s+[^,\u2013\-\n]{3,40}(?:,\s*\d+)?/i);
+  return m ? m[0].trim() : '';
+}
+
 function parseEmail(rawText) {
   // Gestisce tre fonti, ognuna col proprio formato:
   //
@@ -185,13 +192,6 @@ function parseEmail(rawText) {
       if (c.length >= 4 && c.length <= 250) return { val: c, idx: j };
     }
     return { val: '', idx: -1 };
-  };
-
-  // Estrae indirizzo stradale dal titolo:
-  // "Bilocale in Piazzale Loreto, 5, NoLo, Milano" → "Piazzale Loreto, 5"
-  const streetFromTitle = (titolo) => {
-    const m = (titolo || '').match(/\b(via|piazza|piazzale|corso|viale|largo|vicolo|strada)\s+[^,–\-\n]{3,40}(?:,\s*\d+)?/i);
-    return m ? m[0].trim() : '';
   };
 
   // Genera link di ricerca sul portale con l'indirizzo pre-compilato
@@ -825,7 +825,16 @@ function App(){
                 <input style={fi} placeholder="https://www.immobiliare.it/annunci/12345678/" value={form.link} onChange={e=>setForm(f=>({...f,link:e.target.value}))}/>
               </FRow>
               <FRow label="Titolo">
-                <input style={fi} placeholder="es. Trilocale con terrazzo" value={form.titolo} onChange={e=>setForm(f=>({...f,titolo:e.target.value}))}/>
+                <input style={fi} placeholder="es. Trilocale con terrazzo" value={form.titolo} onChange={e=>{
+                  const titolo = e.target.value;
+                  const street = streetFromTitle(titolo);
+                  setForm(f=>({
+                    ...f,
+                    titolo,
+                    // Compila indirizzo solo se era vuoto o era stato estratto automaticamente
+                    indirizzo: f.indirizzo && f.indirizzo !== streetFromTitle(f.titolo) ? f.indirizzo : street,
+                  }));
+                }}/>
               </FRow>
               <FRow label="Fonte">
                 <select style={fi} value={form.fonte} onChange={e=>setForm(f=>({...f,fonte:e.target.value}))}>
@@ -838,7 +847,11 @@ function App(){
                   {ZONE.map(z=><option key={z}>{z}</option>)}
                 </select>
               </FRow>
-              <FRow label="Indirizzo">
+              <FRow label={
+                form.indirizzo && form.indirizzo === streetFromTitle(form.titolo)
+                  ? "Indirizzo ✦ estratto dal titolo"
+                  : "Indirizzo"
+              }>
                 <input style={fi} placeholder="Via Roma 12" value={form.indirizzo} onChange={e=>setForm(f=>({...f,indirizzo:e.target.value}))}/>
               </FRow>
               <FRow label="Prezzo (€)">
