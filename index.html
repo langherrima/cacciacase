@@ -184,6 +184,7 @@ async function fetchApifyDataset(datasetId, apiKey) {
 
 // ── FILTRI TARGET ─────────────────────────────────────────────────
 const KEYWORDS_STOP = ["affitto","in affitto","locazione","affittasi","si affitta","appartamento in affitto"];
+const CITIES_STOP  = ["genova","cormano","bollate","sesto","cinisello","monza","como","bergamo","brescia","torino","roma","napoli","firenze","venezia"];
 const KEYWORDS_OK   = ["bilocale","trilocale","tre locali","due locali","2 locali","3 locali","vendo","vendita","proponiamo in vendita","cedesi"];
 
 const DATE_FROM = new Date("2025-01-01T00:00:00Z");
@@ -197,7 +198,14 @@ function preFilter(items) {
       if (!isNaN(d.getTime()) && d < DATE_FROM) return false;
     }
     const cap = item.caption.toLowerCase();
+    // Scarta città fuori Milano
+    if (CITIES_STOP.some(k => cap.includes(k))) return false;
+    // Tieni solo post che menzionano Milano (o zona milanese)
+    const milanKeywords = ["milano","milan","navigli","porta romana","isola","nolo","lambrate","città studi","cadore","susa","dateo","argonne"];
+    if (!milanKeywords.some(k => cap.includes(k))) return false;
+    // Scarta affitti
     if (KEYWORDS_STOP.some(k => cap.includes(k))) return false;
+    // Tieni solo vendite di tipo giusto
     if (!KEYWORDS_OK.some(k => cap.includes(k))) return false;
     return true;
   });
