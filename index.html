@@ -1,294 +1,147 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<meta name="theme-color" content="#8B3214"/>
-<meta name="apple-mobile-web-app-capable" content="yes"/>
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-<meta name="apple-mobile-web-app-title" content="Caccia Casa"/>
-<title>Caccia Casa Milano</title>
-<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-<script>
-firebase.initializeApp({
-  apiKey: "AIzaSyDghKWGnq2zMkKGUs8PheahA35yC-GGqYY",
-  authDomain: "caccia-case.firebaseapp.com",
-  projectId: "caccia-case",
-  storageBucket: "caccia-case.firebasestorage.app",
-  messagingSenderId: "775563837811",
-  appId: "1:775563837811:web:8967d71ba7c2698f808506"
-});
-const _db = firebase.firestore();
-const _col = _db.collection("annunci");
-window.__db = {
-  subscribe: (cb) => _col.onSnapshot(snap => {
-    cb(snap.docs.map(d => ({...d.data(), _id: d.id})));
-  }),
-  add: (data) => _col.add({...data, _ts: firebase.firestore.FieldValue.serverTimestamp()}),
-  update: (id, data) => { const {_id,_ts,...rest}=data; return _col.doc(id).update(rest); },
-  remove: (id) => _col.doc(id).delete(),
-};
-window.__dbReady = true;
-window.dispatchEvent(new Event("dbReady"));
-</script>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
-<style>
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{background:#B5451B;font-family:'Courier Prime','Courier New',monospace;color:#FAF0E6;min-height:100vh}
-input,select,textarea,button{font-family:inherit}
-select option{color:#1a1a2e;background:#fff}
-@media(max-width:500px){
-  .fg{grid-template-columns:1fr !important}
-  .fg>*{grid-column:span 1 !important}
-}
-</style>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <meta name="theme-color" content="#8B3214"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Caccia Casa"/>
+  <title>Caccia Casa Milano</title>
+
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyDghKWGnq2zMkKGUs8PheahA35yC-GGqYY",
+      authDomain: "caccia-case.firebaseapp.com",
+      projectId: "caccia-case",
+      storageBucket: "caccia-case.firebasestorage.app",
+      messagingSenderId: "775563837811",
+      appId: "1:775563837811:web:8967d71ba7c2698f808506"
+    });
+    const _db  = firebase.firestore();
+    const _col = _db.collection("annunci");
+    window.__db = {
+      subscribe: (cb) => _col.onSnapshot(snap => {
+        cb(snap.docs.map(d => ({...d.data(), _id: d.id})));
+      }),
+      add:    (data)     => _col.add({...data, _ts: firebase.firestore.FieldValue.serverTimestamp()}),
+      update: (id, data) => { const {_id,_ts,...rest}=data; return _col.doc(id).update(rest); },
+      remove: (id)       => _col.doc(id).delete(),
+    };
+    window.__dbReady = true;
+    window.dispatchEvent(new Event("dbReady"));
+  </script>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+    body{background:#B5451B;font-family:'Courier Prime','Courier New',monospace;color:#FAF0E6;min-height:100vh}
+    input,select,textarea,button{font-family:inherit}
+    select option{color:#1a1a2e;background:#fff}
+    @media(max-width:500px){
+      .fg{grid-template-columns:1fr !important}
+      .fg>*{grid-column:span 1 !important}
+    }
+    /* Leaflet popup custom style */
+    .leaflet-popup-content-wrapper{
+      background:#8B3214;color:#FAF0E6;border-radius:10px;
+      font-family:'Courier Prime','Courier New',monospace;font-size:13px;
+      box-shadow:0 4px 20px rgba(0,0,0,.4);
+    }
+    .leaflet-popup-tip{background:#8B3214}
+    .leaflet-popup-content{margin:12px 16px;line-height:1.6}
+    .leaflet-popup-content b{color:#B5921B;font-size:14px}
+    .popup-link{color:#E8C9A0;font-size:12px;text-decoration:none;display:block;margin-top:4px}
+  </style>
 </head>
 <body>
 <div id="root"></div>
+
 <script type="text/babel">
 const { useState, useMemo, useEffect, useCallback, useRef } = React;
 
 const SOURCES = ["Immobiliare.it","Idealista","Casa.it","Tecnocasa","Gabetti","Engel & Völkers","Privato","Altro"];
 const SRC_COLOR = {
-  "Immobiliare.it": {bg:"#B5921B",text:"#FAF0E6"},
-  "Idealista": {bg:"#B5921B",text:"#FAF0E6"},
-  "Casa.it": {bg:"#B5921B",text:"#FAF0E6"},
-  "Tecnocasa": {bg:"#B5921B",text:"#FAF0E6"},
-  "Gabetti": {bg:"#B5921B",text:"#FAF0E6"},
+  "Immobiliare.it":  {bg:"#B5921B",text:"#FAF0E6"},
+  "Idealista":       {bg:"#B5921B",text:"#FAF0E6"},
+  "Casa.it":         {bg:"#B5921B",text:"#FAF0E6"},
+  "Tecnocasa":       {bg:"#B5921B",text:"#FAF0E6"},
+  "Gabetti":         {bg:"#B5921B",text:"#FAF0E6"},
   "Engel & Völkers": {bg:"#B5921B",text:"#FAF0E6"},
-  "Privato": {bg:"#B5921B",text:"#FAF0E6"},
-  "Altro": {bg:"#B5921B",text:"#FAF0E6"},
+  "Privato":         {bg:"#B5921B",text:"#FAF0E6"},
+  "Altro":           {bg:"#B5921B",text:"#FAF0E6"},
 };
 const COND = {"Ottimo":"#16a34a","Buono":"#b45309","Da ristrutturare":"#dc2626"};
 const ZONE = [
   "Navigli","Isola / Garibaldi","Città Studi","Greco / Turro","Porta Vittoria",
-  "Porta Venezia","Porta Romana","Cadore","Susa","Nolo","Repubblica","Lambrate","Lorenteggio",
-  "Fiera / De Angeli","Vigentino","Centro Storico","Altra zona",
+  "Porta Venezia","Porta Romana","Cadore","Susa","Nolo","Repubblica","Lorenteggio","Bicocca",
+  "Fiera / De Angeli","Vigentino","Bande Nere","Centro Storico","Altra zona",
 ];
 const SEARCHES = [
   {nome:"Immobiliare.it", url:"https://www.immobiliare.it/vendita-appartamenti/milano/?prezzoMassimo=470000&superficieMinima=70&superficieMassima=100"},
-  {nome:"Idealista", url:"https://www.idealista.it/vendita-case/milano-milano/"},
-  {nome:"Casa.it", url:"https://www.casa.it/vendita/residenziale/milano/"},
-  {nome:"Tecnocasa", url:"https://www.tecnocasa.it/vendita/appartamento/lombardia/milano.html"},
-  {nome:"Gabetti", url:"https://www.gabetti.it/vendita/appartamento/milano"},
+  {nome:"Idealista",      url:"https://www.idealista.it/vendita-case/milano-milano/"},
+  {nome:"Casa.it",        url:"https://www.casa.it/vendita/residenziale/milano/"},
+  {nome:"Tecnocasa",      url:"https://www.tecnocasa.it/vendita/appartamento/lombardia/milano.html"},
+  {nome:"Gabetti",        url:"https://www.gabetti.it/vendita/appartamento/milano"},
 ];
 const SOCIALS = [
-  {nome:"@carolachiusano", follower:"126K", url:"https://www.instagram.com/carolachiusano/", note:"Milano · Torino · Parigi — la più seguita"},
-  {nome:"@annabuono_", follower:"30K", url:"https://www.instagram.com/annabuono_/", note:"Caseperfette · CityLife · tutta Milano"},
-  {nome:"@jacopotartaglia", follower:"17K", url:"https://www.instagram.com/jacopotartaglia/", note:"Agente immobiliare · mercato e prezzi"},
-  {nome:"@elisabettacasabase", follower:"—", url:"https://www.instagram.com/elisabettacasabase/", note:"Torino · sta aprendo su Milano"},
-  {nome:"RossoMattone", follower:"—", url:"https://www.instagram.com/rossomattone.eu/", note:"Agenzia milanese · property finder"},
+  {nome:"@carolachiusano",         piattaforma:"Instagram", follower:"126K", url:"https://www.instagram.com/carolachiusano/",         note:"Milano · Torino · Parigi — la più seguita"},
+  {nome:"@annabuono_",             piattaforma:"Instagram", follower:"30K",  url:"https://www.instagram.com/annabuono_/",             note:"Caseperfette · CityLife · tutta Milano"},
+  {nome:"@jacopotartaglia",        piattaforma:"Instagram", follower:"17K",  url:"https://www.instagram.com/jacopotartaglia/",        note:"Agente immobiliare · mercato e prezzi"},
+  {nome:"@elisabettacasabase",     piattaforma:"Instagram", follower:"—",    url:"https://www.instagram.com/elisabettacasabase/",     note:"Torino · sta aprendo su Milano"},
+  {nome:"RossoMattone",            piattaforma:"Instagram", follower:"—",    url:"https://www.instagram.com/rossomattone.eu/",        note:"Agenzia milanese · property finder"},
+  {nome:"@immobiliare.it",         piattaforma:"TikTok",    follower:"22.6K",url:"https://www.tiktok.com/@immobiliare.it",            note:"Profilo ufficiale Immobiliare.it"},
+  {nome:"@gangimmobiliaremilano",  piattaforma:"TikTok",    follower:"—",    url:"https://www.tiktok.com/@gangimmobiliaremilano",     note:"Agenzia milanese · tour appartamenti"},
+  {nome:"@gianlucatorre01",        piattaforma:"TikTok",    follower:"—",    url:"https://www.tiktok.com/@gianlucatorre01",           note:"Tour proprietà · Engel & Völkers Milano"},
+  {nome:"@rossomattoneimmobiliare",piattaforma:"TikTok",    follower:"—",    url:"https://www.tiktok.com/@rossomattoneimmobiliare",   note:"RossoMattone su TikTok"},
 ];
-const EMPTY = {titolo:"",zona:"",indirizzo:"",fonte:"Immobiliare.it",prezzo:"",dimensione:"",vani:"",piano:"",condizioni:"Buono",terrazzo:false,box:false,cantina:false,voto:3,note:"",link:""};
 
-const fmt = p => p ? `€ ${Number(p).toLocaleString("it-IT")}` : "—";
-const fmtM = m => m ? `${m} m²` : "—";
-const ppm = (p,m)=> p&&m ? `€ ${Math.round(Number(p)/Number(m)).toLocaleString("it-IT")}/m²` : "";
+const EMPTY = {
+  titolo:"",zona:"",indirizzo:"",fonte:"Immobiliare.it",
+  prezzo:"",dimensione:"",vani:"",piano:"",condizioni:"Buono",
+  terrazzo:false,box:false,cantina:false,voto:3,note:"",link:"",
+  lat:null,lng:null
+};
 
-// ── EMAIL PARSER ─────────────────────────────────────────────────────────────
+const fmt  = p    => p  ? `€ ${Number(p).toLocaleString("it-IT")}` : "—";
+const fmtM = m    => m  ? `${m} m²` : "—";
+const ppm  = (p,m)=> p&&m ? `€ ${Math.round(Number(p)/Number(m)).toLocaleString("it-IT")}/m²` : "";
 
-function mapZona(raw) {
-  const r = (raw || "").toLowerCase().trim();
-  const MAP = [
-    [["navigli"], "Navigli"],
-    [["isola","farini","garibaldi","zara","stazione centrale"], "Isola / Garibaldi"],
-    [["città studi","citta studi","venezia"], "Città Studi"],
-    [["greco","turro","parco trotter"], "Greco / Turro"],
-    [["porta vittoria","vittoria"], "Porta Vittoria"],
-    [["porta venezia"], "Porta Venezia"],
-    [["porta romana","romana"], "Porta Romana"],
-    [["cadore"], "Cadore"],
-    [["susa"], "Susa"],
-    [["nolo","casoretto","loreto","padova"], "Nolo"],
-    [["repubblica"], "Repubblica"],
-    [["rubattino","lambrate"], "Lambrate"],
-    [["lorenteggio"], "Lorenteggio"],
-    [["fiera","de angeli"], "Fiera / De Angeli"],
-    [["vigentino"], "Vigentino"],
-    [["centro","duomo","brera","sempione"], "Centro Storico"],
-  ];
-  for (const [keys, zona] of MAP) {
-    if (keys.some(k => r.includes(k))) return zona;
-  }
-  return "Altra zona";
+// Estrae via/piazza/corso/ecc. dal titolo dell'annuncio
+function streetFromTitle(title) {
+  if (!title) return "";
+  const m = title.match(
+    /\b(via|viale|corso|piazza|piazzale|largo|vicolo|borgo|strada|lungolago|lungofiume|lungomare|lungotevere|alzaia)\s+[a-zA-ZÀ-ú'\s]{2,30}(?:,?\s*\d{1,3})?/i
+  );
+  if (!m) return "";
+  return m[0].trim().replace(/\s+/g, " ");
 }
 
-// Estrae indirizzo stradale dal titolo annuncio:
-// "Bilocale in Piazzale Loreto, 5, NoLo, Milano" → "Piazzale Loreto, 5"
-function streetFromTitle(titolo) {
-  const m = (titolo || '').match(/\b(via|piazza|piazzale|corso|viale|largo|vicolo|strada)\s+[^,\u2013\-\n]{3,40}(?:,\s*\d+)?/i);
-  return m ? m[0].trim() : '';
+// Geocodifica con Nominatim
+async function geocodeAddress(indirizzo) {
+  if (!indirizzo) return null;
+  try {
+    const q = encodeURIComponent(indirizzo + ", Milano, Italia");
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=it`,
+      { headers: { "Accept-Language": "it" } }
+    );
+    const data = await res.json();
+    if (data.length > 0) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  } catch(e) {}
+  return null;
 }
-
-function parseEmail(rawText) {
-  // Gestisce tre fonti, ognuna col proprio formato:
-  //
-  // IMMOBILIARE.IT
-  //   Formato A (Gmail browser, BOM concatenati):
-  //     "Parco Trotter€ 298.00053 m² | 2 locali | 1 bagno"
-  //   Formato B (Apple Mail / altri client, righe separate):
-  //     "Bilocale via Padova 60, Parco Trotter, Milano"
-  //     "Parco Trotter"  /  "€ 298.000"  /  "53 m² | 2 locali | 1 bagno"
-  //
-  // IDEALISTA
-  //   "Trilocale in Via Stradivari, Buenos Aires, Milano"
-  //   "480.000 €"          ← euro DOPO il numero
-  //   "90 m²  3 stanze  1º piano"
-  //
-  // CASA.IT
-  //   "Trilocale in affitto in Via Foppa 40,"
-  //   "Washington, Milano (MI)"
-  //   "€ 950"              ← euro PRIMA, nessuna info locali
-  //   "20 m²"
-
-  const BOM = '\uFEFF';
-  const NOISE = /^(VEDI DETTAGLI|AVVIA RICERCA|GESTISCI|DISABILITA|MODIFICA|CONTATTA|Vedi tutti|Vedi \d+ foto|Scarica l|Questo annuncio|Da Le tue|Puoi controllare|Smettere di|Con l.app|Problemi\?|Utilizzando|© 20|Copyright|Condizioni|Privacy|Non vuoi|Questa (mail|email)|La tua ricerca|Modifica$|noreply|Forwarded|Subject:|Da:|Date:|To:|mailing list|Annulla iscrizione|non essendoci|ti suggeriamo|Vuoi ricevere|Ciao,?\s*$)/i;
-
-  const text = rawText.replace(new RegExp(BOM, 'g'), '\n');
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-
-  const DEFAULTS = { condizioni:'Buono', terrazzo:false, box:false, cantina:false, voto:3, note:'', link:'' };
-
-  // Fonte rilevata dall'intestazione
-  const detectSource = () => {
-    const full = lines.join(' ').toLowerCase();
-    if (full.includes('immobiliare.it') || full.includes('notifiche.immobiliare')) return 'Immobiliare.it';
-    if (full.includes('idealista'))  return 'Idealista';
-    if (full.includes('casa.it'))    return 'Casa.it';
-    return 'Immobiliare.it'; // default più comune
-  };
-  const fonte = detectSource();
-
-  const results = [];
-  const seen = new Set();
-
-  const push = (obj) => {
-    if (!obj.titolo && !obj.zonaRaw) return;
-    const key = obj.titolo || obj.zonaRaw;
-    if (seen.has(key)) return;
-    seen.add(key);
-    const { zonaRaw, ...rest } = obj;
-    const street = streetFromTitle(rest.titolo);
-    const indirizzo = street; // salva nel campo indirizzo per la mappa
-    const link = searchUrl(fonte, street, zonaRaw); // link di ricerca (non diretto)
-    results.push({ ...DEFAULTS, fonte, indirizzo, link, ...rest, zonaRaw, zona: mapZona(zonaRaw || '') });
-  };
-
-  const prevNoise = (i) => NOISE.test(lines[i] || '');
-
-  // Cerca una riga non-rumore guardando indietro, saltando le righe indicate
-  const lookBack = (fromIdx, skip=[]) => {
-    for (let j = fromIdx; j >= Math.max(0, fromIdx - 6); j--) {
-      const c = lines[j];
-      if (prevNoise(j)) continue;
-      if (skip.includes(c)) continue;
-      if (c.length >= 4 && c.length <= 250) return { val: c, idx: j };
-    }
-    return { val: '', idx: -1 };
-  };
-
-  // Genera link di ricerca sul portale con l'indirizzo pre-compilato
-  const searchUrl = (fonte, street, zonaRaw) => {
-    const q = encodeURIComponent(street || zonaRaw || 'Milano');
-    if (fonte === 'Idealista') return `https://www.idealista.it/vendita-case/milano-milano/?keywords=${q}`;
-    if (fonte === 'Casa.it')   return `https://www.casa.it/vendita/residenziale/milano/?q=${q}`;
-    return `https://www.immobiliare.it/vendita-appartamenti/milano/?q=${q}`;
-  };
-
-  // Estrae zona dal titolo Idealista/Casa.it:
-  // "Trilocale in Via X, Buenos Aires, Milano" → "Buenos Aires"
-  const zoneFromTitle = (title) => {
-    const parts = title.split(',').map(s => s.trim());
-    const mi = parts.findIndex(p => /\bmilano\b/i.test(p));
-    if (mi > 0) return parts[mi - 1].replace(/\s*\(MI\)\s*$/i, '').trim();
-    return '';
-  };
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    // ── IMMOBILIARE FORMATO A: BOM → tutto su una riga ─────────────────────
-    // "Parco Trotter€ 298.00053 m² | 2 locali"
-    const mA = line.match(/^(.{0,60}?)€\s*(\d{1,3}(?:\.\d{3})*)(\d+)\s*m²\s*\|\s*(\d+)\s*locali/);
-    if (mA) {
-      const zonaRaw = mA[1].trim();
-      const { val: titolo } = lookBack(i - 1, [zonaRaw]);
-      push({ titolo, zonaRaw, prezzo: mA[2].replace(/\./g,''), dimensione: mA[3], vani: mA[4] });
-      continue;
-    }
-
-    // ── IDEALISTA: prezzo termina con € ─────────────────────────────────────
-    // "480.000 €"
-    const mIdeal = line.match(/^([\d.]+)\s*€\s*$/);
-    if (mIdeal) {
-      const prezzoNum = mIdeal[1].replace(/\./g, '');
-      // titolo: riga precedente non-rumore
-      const { val: titolo } = lookBack(i - 1, []);
-      // dettagli: riga successiva con m²
-      let mqStr = '', locali = '';
-      for (let j = i + 1; j <= Math.min(lines.length - 1, i + 3); j++) {
-        const mMq = lines[j].match(/(\d+)\s*m²/);
-        if (mMq) {
-          mqStr = mMq[1];
-          const mLoc = lines[j].match(/(\d+)\s*stanze?/i);
-          if (mLoc) locali = mLoc[1];
-          break;
-        }
-      }
-      const zonaRaw = zoneFromTitle(titolo);
-      push({ titolo, zonaRaw, prezzo: prezzoNum, dimensione: mqStr, vani: locali });
-      continue;
-    }
-
-    // ── IMMOBILIARE FORMATO B + CASA.IT: prezzo inizia con € ────────────────
-    // "€ 396.000" / "€ 950"
-    const mPrice = line.match(/^€\s*([\d.]+)\s*$/);
-    if (mPrice) {
-      const nextLine = lines[i + 1] || '';
-
-      // Ha "m²" nella riga successiva?
-      const mMq = nextLine.match(/^(\d+)\s*m²/);
-      if (mMq) {
-        const mqStr   = mMq[1];
-        const prezzoNum = mPrice[1].replace(/\./g, '');
-        // locali: opzionale ("| 2 locali" o "3 stanze")
-        const mLoc = nextLine.match(/(\d+)\s*(locali|stanze?)/i);
-        const locali = mLoc ? mLoc[1] : '';
-
-        // Cerca zona e titolo guardando indietro
-        let zonaRaw = '', titolo = '';
-        for (let j = i - 1; j >= Math.max(0, i - 6); j--) {
-          if (prevNoise(j)) continue;
-          const c = lines[j];
-          if (!zonaRaw && c.length >= 3 && c.length <= 80) {
-            zonaRaw = c;
-          } else if (zonaRaw && c.length >= 8) {
-            // Se la riga finisce con "," potrebbe essere prima metà di indirizzo (Casa.it)
-            titolo = c.endsWith(',') ? c + ' ' + zonaRaw : c;
-            break;
-          }
-        }
-        // Per Casa.it la zona è nel formato "Washington, Milano (MI)" → estrai solo la zona
-        const zonaClean = zonaRaw.replace(/,?\s*Milano\s*(\(MI\))?\s*$/i, '').trim();
-        push({ titolo: titolo || zonaRaw, zonaRaw: zonaClean || zonaRaw, prezzo: prezzoNum, dimensione: mqStr, vani: locali });
-        i++; // salta riga dettagli
-      }
-    }
-  }
-
-  return results;
-}
-// Alias per compatibilità
-const parseImmobiliareEmail = parseEmail;
-
-// ── COMPONENTI ───────────────────────────────────────────────────────────────
 
 function Badge({fonte}){
   const sc=SRC_COLOR[fonte]||SRC_COLOR["Altro"];
@@ -327,96 +180,92 @@ function FRow({label,children,span=1}){
     </div>
   );
 }
-const fi = {border:"1px solid rgba(255,255,255,.3)",borderRadius:7,padding:"10px 12px",fontSize:15,fontFamily:"Courier Prime,Courier New,monospace",outline:"none",background:"#9B3A17",width:"100%",boxSizing:"border-box",color:"#FAF0E6"};
+
+const fi  = {border:"1px solid rgba(255,255,255,.3)",borderRadius:7,padding:"10px 12px",fontSize:15,fontFamily:"Courier Prime,Courier New,monospace",outline:"none",background:"#9B3A17",width:"100%",boxSizing:"border-box",color:"#FAF0E6"};
 const btn = {background:"#B5921B",color:"#FAF0E6",border:"none",borderRadius:8,padding:"10px 18px",fontSize:14,fontWeight:700,fontFamily:"Courier Prime,Courier New,monospace",cursor:"pointer"};
 
-function MapView({listings}){
-  const mapRef = React.useRef(null);
-  const instanceRef = React.useRef(null);
-  const markersRef = React.useRef([]);
-  const condColor = {"Ottimo":"#16a34a","Buono":"#B5921B","Da ristrutturare":"#dc2626"};
-  function makeIcon(color){
-    return L.divIcon({
-      className:"",
-      html:`<div style="width:26px;height:26px;background:${color};border:3px solid #FAF0E6;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:11px">🏠</div>`,
-      iconSize:[26,26],iconAnchor:[13,13],popupAnchor:[0,-16]
-    });
-  }
-  useEffect(()=>{
-    if(!mapRef.current) return;
-    if(!instanceRef.current){
-      instanceRef.current = L.map(mapRef.current,{zoomControl:true}).setView([45.4654,9.1859],12);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
-        attribution:"© OpenStreetMap",maxZoom:18
-      }).addTo(instanceRef.current);
+// ─── MAPPA ────────────────────────────────────────────────────────────────────
+function MapTab({ listings }) {
+  const containerRef = useRef(null);
+  const mapRef       = useRef(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    // Distruggi la mappa precedente se esiste
+    if (mapRef.current) {
+      mapRef.current.remove();
+      mapRef.current = null;
     }
-    markersRef.current.forEach(m=>m.remove());
-    markersRef.current=[];
-    listings.forEach(l=>{
-      if(!l.lat||!l.lng) return;
-      const color=condColor[l.condizioni]||"#888";
-      const stars="★".repeat(l.voto||0)+"☆".repeat(5-(l.voto||0));
-      const popup=`<div style="min-width:180px;font-family:Courier Prime,monospace">
-        <div style="font-family:Playfair Display,serif;font-size:13px;font-weight:700;color:#3D1C0A;margin-bottom:3px">${l.titolo||"Annuncio"}</div>
-        <div style="font-size:11px;color:#8B5E3C;margin-bottom:6px">📍 ${l.zona||""}${l.indirizzo?" · "+l.indirizzo:""}</div>
-        <div style="display:flex;gap:6px;margin-bottom:5px;flex-wrap:wrap">
-          <span style="background:#B5921B;color:#FAF0E6;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:700">${l.prezzo?`€ ${Number(l.prezzo).toLocaleString("it-IT")}`:""}</span>
-          <span style="background:#B5921B;color:#FAF0E6;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:700">${l.dimensione?l.dimensione+" m²":""}</span>
-        </div>
-        <div style="font-size:14px;color:${color};margin-bottom:4px">${stars}</div>
-        ${l.link?`<a href="${l.link}" target="_blank" style="font-size:11px;color:#8B3214;font-weight:700">Vedi annuncio →</a>`:""}
-      </div>`;
-      const marker=L.marker([l.lat,l.lng],{icon:makeIcon(color)}).bindPopup(popup).addTo(instanceRef.current);
-      markersRef.current.push(marker);
+
+    const map = L.map(containerRef.current, { zoomControl: true })
+      .setView([45.4654, 9.1859], 13);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap contributors",
+      maxZoom: 19,
+    }).addTo(map);
+
+    const withCoords = listings.filter(l => l.lat && l.lng);
+
+    withCoords.forEach(l => {
+      const popupHtml = `
+        <b>${l.titolo || "Senza titolo"}</b><br>
+        📍 ${[l.zona, l.indirizzo].filter(Boolean).join(" · ")}<br>
+        ${fmt(l.prezzo)}${l.dimensione ? " · " + fmtM(l.dimensione) : ""}
+        ${l.link ? `<a href="${l.link}" target="_blank" class="popup-link">Vedi annuncio →</a>` : ""}
+      `;
+      L.marker([l.lat, l.lng])
+        .addTo(map)
+        .bindPopup(popupHtml, { maxWidth: 220 });
     });
-  },[listings]);
-  const withLocation = listings.filter(l=>l.lat&&l.lng).length;
+
+    if (withCoords.length === 1) {
+      map.setView([withCoords[0].lat, withCoords[0].lng], 15);
+    } else if (withCoords.length > 1) {
+      const bounds = L.latLngBounds(withCoords.map(l => [l.lat, l.lng]));
+      map.fitBounds(bounds, { padding: [40, 40] });
+    }
+
+    setTimeout(() => map.invalidateSize(), 120);
+    mapRef.current = map;
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+  }, [listings]);
+
+  const noCoords = listings.filter(l => !l.lat || !l.lng).length;
+
   return (
-    <div style={{borderRadius:10,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,.3)"}}>
-      <div style={{background:"#8B3214",padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div style={{fontFamily:"Playfair Display,Georgia,serif",fontSize:15,fontWeight:700,color:"#FAF0E6"}}>Mappa annunci · Milano</div>
-        <div style={{fontSize:10,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",opacity:.7,textTransform:"uppercase",letterSpacing:1}}>{withLocation} annunci posizionati</div>
-      </div>
-      <div ref={mapRef} style={{height:420,width:"100%"}}/>
-      <div style={{background:"#8B3214",padding:"10px 14px",display:"flex",gap:20,flexWrap:"wrap",alignItems:"center"}}>
-        {[["#16a34a","Ottimo / Ristrutturato"],["#B5921B","Buono"],["#dc2626","Da ristrutturare"]].map(([col,label])=>(
-          <div key={label} style={{display:"flex",alignItems:"center",gap:6}}>
-            <div style={{width:12,height:12,borderRadius:"50%",background:col,border:"2px solid #FAF0E6"}}/>
-            <span style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0"}}>{label}</span>
-          </div>
-        ))}
-        {listings.length>0&&withLocation===0&&(
-          <span style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",opacity:.7}}>Aggiungi un indirizzo agli annunci per vederli sulla mappa</span>
-        )}
-        {listings.length===0&&(
-          <span style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",opacity:.7}}>Nessun annuncio ancora — aggiungili dalla tab ＋ Aggiungi</span>
-        )}
-      </div>
+    <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 100px)"}}>
+      <div ref={containerRef} style={{flex:1,minHeight:0}} />
+      {noCoords > 0 && (
+        <div style={{padding:"10px 16px",background:"#9B3A17",fontSize:12,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",lineHeight:1.5}}>
+          ⚠️ {noCoords} annuncio{noCoords>1?"i":""} senza coordinate.
+          Riaprili con ✏️ e risalva per geocodificarli.
+        </div>
+      )}
     </div>
   );
 }
 
-// ── APP ───────────────────────────────────────────────────────────────────────
-
+// ─── APP ──────────────────────────────────────────────────────────────────────
 function App(){
-  const [dbReady, setDbReady] = useState(!!window.__dbReady);
+  const [dbReady,  setDbReady]  = useState(!!window.__dbReady);
   const [listings, setListings] = useState([]);
-  const [tab, setTab] = useState("ricerche");
-  const [form, setForm] = useState(EMPTY);
-  const [editId, setEditId] = useState(null);
-  const [confirm, setConfirm] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [fZona, setFZona] = useState("Tutte");
-  const [fFonte, setFFonte] = useState("Tutte");
-  const [fCond, setFCond] = useState("Tutte");
-  const [fSort, setFSort] = useState("data_desc");
-  const [fQuery, setFQuery] = useState("");
-
-  // Stato parser email
-  const [emailText, setEmailText] = useState('');
-  const [parsedItems, setParsedItems] = useState([]);
-  const [addingIdx, setAddingIdx] = useState(null);
-  const [addedSet, setAddedSet] = useState(new Set());
+  const [tab,      setTab]      = useState("ricerche");
+  const [form,     setForm]     = useState(EMPTY);
+  const [editId,   setEditId]   = useState(null);
+  const [confirm,  setConfirm]  = useState(null);
+  const [saving,   setSaving]   = useState(false);
+  const [geocoding,setGeocoding]= useState(false);
+  const [fZona,    setFZona]    = useState("Tutte");
+  const [fFonte,   setFFonte]   = useState("Tutte");
+  const [fCond,    setFCond]    = useState("Tutte");
+  const [fSort,    setFSort]    = useState("data_desc");
+  const [fQuery,   setFQuery]   = useState("");
 
   useEffect(()=>{
     if(window.__dbReady){ setDbReady(true); return; }
@@ -434,91 +283,57 @@ function App(){
     return unsub;
   },[dbReady]);
 
-  const extractStreet = (titolo) => {
-    const m = (titolo || '').match(/\b(via|piazza|corso|viale|largo|vicolo|strada)\s+[^,\n]+/i);
-    return m ? m[0].trim() : '';
+  // Quando l'utente incolla il titolo → auto-compila indirizzo
+  const onTitoloChange = (val) => {
+    const addr = streetFromTitle(val);
+    setForm(f => ({
+      ...f,
+      titolo: val,
+      indirizzo: addr || f.indirizzo,   // non sovrascrive se già compilato manualmente
+    }));
   };
 
-  const geocode = async (indirizzo, zona) => {
-    const zonaClean = (zona || '').replace(/altra zona/i, '').split(/[\/,]/)[0].trim();
-    const parts = [indirizzo, zonaClean, 'Milano', 'Italy'].filter(Boolean);
-    const q = parts.join(', ');
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`,
-        { headers: { 'Accept-Language': 'it' } }
-      );
-      const data = await res.json();
-      if (data.length) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-    } catch(e) {}
-    return null;
-  };
-
-  const saveForm = async ()=>{
-    if(!form.link&&!form.titolo) return;
+  const saveForm = async () => {
+    if (!form.link && !form.titolo) return;
     setSaving(true);
     try {
-      const {_id,_ts,...data} = form;
-      if((data.indirizzo||data.zona||data.titolo) && !data.lat) {
-        const street = data.indirizzo || extractStreet(data.titolo);
-        const coords = await geocode(street, data.zona);
-        if(coords){ data.lat = coords.lat; data.lng = coords.lng; }
+      const { _id, _ts, ...data } = form;
+
+      // Geocodifica se c'è un indirizzo e non abbiamo già le coordinate
+      if (data.indirizzo && !data.lat) {
+        setGeocoding(true);
+        const coords = await geocodeAddress(data.indirizzo);
+        if (coords) {
+          data.lat = coords.lat;
+          data.lng = coords.lng;
+        }
+        setGeocoding(false);
       }
-      if(editId!==null){
+
+      if (editId !== null) {
         await window.__db.update(editId, data);
       } else {
         await window.__db.add(data);
       }
-      setEditId(null); setForm(EMPTY); setTab("annunci");
-    } catch(e){ alert("Errore salvataggio: "+e.message); }
-    setSaving(false);
-  };
 
-  const startEdit = l=>{ setForm({...l}); setEditId(l._id); setTab("aggiungi"); };
-  const delItem = async id=>{ await window.__db.remove(id); setConfirm(null); };
-
-  // Gestione email
-  const handleEmailChange = (e) => {
-    const text = e.target.value;
-    setEmailText(text);
-    setAddedSet(new Set());
-    if (text.length > 20) {
-      const items = parseImmobiliareEmail(text);
-      setParsedItems(items);
-    } else {
-      setParsedItems([]);
-    }
-  };
-
-  const clearEmail = () => {
-    setEmailText('');
-    setParsedItems([]);
-    setAddedSet(new Set());
-  };
-
-  const addParsedItem = async (item, idx) => {
-    setAddingIdx(idx);
-    try {
-      const { zonaRaw, ...data } = item;
-      const full = { ...EMPTY, ...data };
-      // Usa indirizzo stradale estratto dal titolo se disponibile, poi la zona
-      const street = data.indirizzo || extractStreet(data.titolo);
-      const zonaForGeo = data.zona !== 'Altra zona' ? data.zona : zonaRaw;
-      const coords = await geocode(street, zonaForGeo);
-      if (coords) { full.lat = coords.lat; full.lng = coords.lng; }
-      await window.__db.add(full);
-      setAddedSet(prev => new Set([...prev, idx]));
+      setEditId(null);
+      setForm(EMPTY);
+      setTab("mappa");   // → vai alla mappa dopo il salvataggio
     } catch(e) {
-      alert("Errore: " + e.message);
+      alert("Errore salvataggio: " + e.message);
     }
-    setAddingIdx(null);
+    setSaving(false);
+    setGeocoding(false);
   };
+
+  const startEdit = l => { setForm({...l}); setEditId(l._id); setTab("aggiungi"); };
+  const delItem   = async id => { await window.__db.remove(id); setConfirm(null); };
 
   const filtered = useMemo(()=>{
     let r = listings.filter(l=>{
-      if(fZona !=="Tutte"&&l.zona !==fZona) return false;
-      if(fFonte!=="Tutte"&&l.fonte !==fFonte) return false;
-      if(fCond !=="Tutte"&&l.condizioni!==fCond) return false;
+      if(fZona !=="Tutte"&&l.zona      !==fZona)  return false;
+      if(fFonte!=="Tutte"&&l.fonte     !==fFonte) return false;
+      if(fCond !=="Tutte"&&l.condizioni!==fCond)  return false;
       if(fQuery){
         const q=fQuery.toLowerCase();
         if(![l.titolo,l.zona,l.indirizzo,l.note,l.fonte].some(s=>s?.toLowerCase().includes(q))) return false;
@@ -526,22 +341,22 @@ function App(){
       return true;
     });
     r.sort((a,b)=>{
-      if(fSort==="prezzo_asc") return (Number(a.prezzo)||Infinity)-(Number(b.prezzo)||Infinity);
+      if(fSort==="prezzo_asc")  return (Number(a.prezzo)||Infinity)-(Number(b.prezzo)||Infinity);
       if(fSort==="prezzo_desc") return (Number(b.prezzo)||0)-(Number(a.prezzo)||0);
-      if(fSort==="mq_desc") return (Number(b.dimensione)||0)-(Number(a.dimensione)||0);
-      if(fSort==="voto_desc") return (Number(b.voto)||0)-(Number(a.voto)||0);
-      if(fSort==="ppm") return (a.prezzo/a.dimensione||Infinity)-(b.prezzo/b.dimensione||Infinity);
+      if(fSort==="mq_desc")     return (Number(b.dimensione)||0)-(Number(a.dimensione)||0);
+      if(fSort==="voto_desc")   return (Number(b.voto)||0)-(Number(a.voto)||0);
+      if(fSort==="ppm")         return (a.prezzo/a.dimensione||Infinity)-(b.prezzo/b.dimensione||Infinity);
       return 0;
     });
     return r;
   },[listings,fZona,fFonte,fCond,fSort,fQuery]);
 
-  const withP = filtered.filter(l=>Number(l.prezzo)>0);
+  const withP  = filtered.filter(l=>Number(l.prezzo)>0);
   const withPM = filtered.filter(l=>Number(l.prezzo)>0&&Number(l.dimensione)>0);
-  const stats = {
-    tot: filtered.length,
-    minP: withP.length ? Math.min(...withP.map(l=>Number(l.prezzo))) : 0,
-    avgP: withP.length ? Math.round(withP.reduce((s,l)=>s+Number(l.prezzo),0)/withP.length) : 0,
+  const stats  = {
+    tot:  filtered.length,
+    minP: withP.length  ? Math.min(...withP.map(l=>Number(l.prezzo))) : 0,
+    avgP: withP.length  ? Math.round(withP.reduce((s,l)=>s+Number(l.prezzo),0)/withP.length) : 0,
     avgPM:withPM.length ? Math.round(withPM.reduce((s,l)=>s+l.prezzo/l.dimensione,0)/withPM.length) : 0,
   };
 
@@ -565,16 +380,16 @@ function App(){
             <div style={{fontSize:10,fontFamily:"Courier Prime,Courier New,monospace",color:"#7EC87E"}}>● live</div>
           </div>
         </div>
-        <nav style={{display:"flex"}}>
+        <nav style={{display:"flex",overflowX:"auto"}}>
           {[
-            {id:"ricerche",icon:"🔗",label:"Ricerche"},
-            {id:"annunci", icon:"📋",label:`Annunci (${listings.length})`},
-            {id:"mappa",   icon:"🗺", label:"Mappa"},
-            {id:"aggiungi",icon:editId!==null?"✏️":"＋",label:editId!==null?"Modifica":"Aggiungi"},
+            {id:"ricerche", icon:"🔗", label:"Ricerche"},
+            {id:"annunci",  icon:"📋", label:`Annunci (${listings.length})`},
+            {id:"mappa",    icon:"🗺", label:"Mappa"},
+            {id:"aggiungi", icon:editId!==null?"✏️":"＋", label:editId!==null?"Modifica":"Aggiungi"},
           ].map(t=>(
             <button key={t.id}
               onClick={()=>{ if(t.id==="aggiungi"&&editId===null) setForm(EMPTY); setTab(t.id); }}
-              style={{background:"transparent",border:"none",borderBottom:`3px solid ${tab===t.id?"#E8C9A0":"transparent"}`,padding:"10px 14px",fontSize:12,fontFamily:"Courier Prime,Courier New,monospace",color:tab===t.id?"#E8C9A0":"#C4967A",cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+              style={{background:"transparent",border:"none",borderBottom:`3px solid ${tab===t.id?"#E8C9A0":"transparent"}`,padding:"10px 14px",fontSize:12,fontFamily:"Courier Prime,Courier New,monospace",color:tab===t.id?"#E8C9A0":"#C4967A",cursor:"pointer",display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}>
               <span style={{fontSize:15}}>{t.icon}</span>{t.label}
             </button>
           ))}
@@ -584,34 +399,45 @@ function App(){
       {/* TAB RICERCHE */}
       {tab==="ricerche"&&(
         <div style={{padding:"20px 16px 40px",maxWidth:760,margin:"0 auto"}}>
-          <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",color:"#E8C9A0",fontFamily:"Courier Prime,Courier New,monospace",marginBottom:12,opacity:.7}}>🏢 Piattaforme e agenzie immobiliari</div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:10}}>
+          <p style={{fontSize:14,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",lineHeight:1.7,marginBottom:18}}>
+            Apri le piattaforme già filtrate su Milano. Quando trovi un annuncio,
+            copia il <b>titolo</b> dal sito e incollalo in <b>＋ Aggiungi</b> — l'indirizzo si compila da solo.
+          </p>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:14}}>
             {SEARCHES.map(({nome,url})=>(
               <a key={nome} href={url} target="_blank" rel="noopener noreferrer"
-                style={{background:"#8B3214",borderRadius:10,padding:14,borderLeft:"4px solid #B5921B",display:"flex",flexDirection:"column",gap:6,textDecoration:"none",color:"inherit",boxShadow:"0 2px 6px rgba(0,0,0,.2)"}}>
+                 style={{background:"#8B3214",borderRadius:10,padding:18,borderLeft:"4px solid #B5921B",display:"flex",flexDirection:"column",gap:8,textDecoration:"none",color:"inherit",boxShadow:"0 2px 6px rgba(0,0,0,.2)"}}>
                 <Badge fonte={nome}/>
-                <div style={{fontSize:14,fontWeight:700,fontFamily:"Playfair Display,Georgia,serif",color:"#FAF0E6"}}>Cerca su {nome}</div>
-                <div style={{fontSize:10,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",lineHeight:1.4,opacity:.7}}>{url.replace("https://","").slice(0,44)}…</div>
-                <div style={{background:"#B5921B",color:"#FAF0E6",borderRadius:6,padding:"6px 12px",fontSize:12,fontWeight:700,fontFamily:"Courier Prime,Courier New,monospace",alignSelf:"flex-start"}}>Apri →</div>
+                <div style={{fontSize:15,fontWeight:700,fontFamily:"Playfair Display,Georgia,serif",color:"#FAF0E6"}}>Cerca su {nome}</div>
+                <div style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",lineHeight:1.5,wordBreak:"break-all",opacity:.7}}>{url.replace("https://","").slice(0,46)}…</div>
+                <div style={{background:"#B5921B",color:"#FAF0E6",borderRadius:7,padding:"8px 14px",fontSize:13,fontWeight:700,fontFamily:"Courier Prime,Courier New,monospace",alignSelf:"flex-start"}}>Apri →</div>
               </a>
             ))}
           </div>
-          <div style={{height:1,background:"rgba(255,255,255,.15)",margin:"22px 0"}}/>
-          <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",color:"#E8C9A0",fontFamily:"Courier Prime,Courier New,monospace",marginBottom:12,opacity:.7}}>📸 Profili Instagram da monitorare</div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:10}}>
-            {SOCIALS.map(({nome,follower,url,note})=>(
-              <a key={nome} href={url} target="_blank" rel="noopener noreferrer"
-                style={{background:"#8B3214",borderRadius:10,padding:14,borderLeft:"4px solid #B5921B",display:"flex",flexDirection:"column",gap:6,textDecoration:"none",color:"inherit",boxShadow:"0 2px 6px rgba(0,0,0,.2)"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <span style={{fontSize:10,fontWeight:700,fontFamily:"Courier Prime,Courier New,monospace",padding:"2px 8px",borderRadius:20,background:"#B5921B",color:"#FAF0E6"}}>📸 Instagram</span>
-                  {follower!=="—"&&<span style={{fontSize:10,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",opacity:.7}}>{follower}</span>}
-                </div>
-                <div style={{fontSize:13,fontWeight:700,fontFamily:"Playfair Display,Georgia,serif",color:"#FAF0E6"}}>{nome}</div>
-                <div style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",lineHeight:1.4,opacity:.7}}>{note}</div>
-                <div style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#B5921B",fontWeight:700}}>Apri e attiva 🔔 →</div>
-              </a>
-            ))}
+
+          {/* Profili social */}
+          <div style={{marginTop:28}}>
+            <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",color:"#E8C9A0",fontFamily:"Courier Prime,Courier New,monospace",marginBottom:14,opacity:.7}}>📱 Profili Social da monitorare</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:12}}>
+              {SOCIALS.map(({nome,piattaforma,follower,url,note})=>{
+                const isIG=piattaforma==="Instagram";
+                return (
+                  <a key={nome} href={url} target="_blank" rel="noopener noreferrer"
+                     style={{background:"#8B3214",borderRadius:10,padding:14,borderLeft:"4px solid #B5921B",display:"flex",flexDirection:"column",gap:6,textDecoration:"none",color:"inherit",boxShadow:"0 2px 6px rgba(0,0,0,.2)"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span style={{fontSize:11,fontWeight:700,fontFamily:"Courier Prime,Courier New,monospace",padding:"2px 8px",borderRadius:20,background:"#B5921B",color:"#FAF0E6"}}>{isIG?"📸":"🎵"} {piattaforma}</span>
+                      {follower!=="—"&&<span style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",opacity:.7}}>{follower}</span>}
+                    </div>
+                    <div style={{fontSize:13,fontWeight:700,fontFamily:"Playfair Display,Georgia,serif",color:"#FAF0E6"}}>{nome}</div>
+                    <div style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",lineHeight:1.4,opacity:.7}}>{note}</div>
+                    <div style={{fontSize:12,fontFamily:"Courier Prime,Courier New,monospace",color:"#B5921B",fontWeight:700}}>Apri e attiva 🔔 →</div>
+                  </a>
+                );
+              })}
+            </div>
           </div>
+
+          {/* Istruzione iPhone */}
           <div style={{marginTop:28,background:"#8B3214",borderRadius:12,padding:20,color:"#FAF0E6"}}>
             <div style={{fontSize:13,fontWeight:700,fontFamily:"Courier Prime,Courier New,monospace",marginBottom:8,color:"#E8C9A0"}}>📱 Aggiungi alla Home dell'iPhone</div>
             <div style={{fontSize:13,fontFamily:"Courier Prime,Courier New,monospace",lineHeight:1.8,color:"#E8C9A0"}}>
@@ -624,41 +450,36 @@ function App(){
         </div>
       )}
 
-      {/* TAB MAPPA */}
-      {tab==="mappa"&&(
-        <div style={{padding:"16px 16px 40px",maxWidth:760,margin:"0 auto"}}>
-          <MapView listings={listings}/>
-        </div>
-      )}
-
       {/* TAB ANNUNCI */}
       {tab==="annunci"&&(
         <div style={{padding:"16px 16px 40px",maxWidth:760,margin:"0 auto"}}>
           <div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:12,alignItems:"center"}}>
             <input style={{...fi,flex:2,minWidth:120,padding:"7px 10px",fontSize:13}} placeholder="🔍 Cerca..." value={fQuery} onChange={e=>setFQuery(e.target.value)}/>
-            <Sel value={fZona} onChange={setFZona} opts={["Tutte",...ZONE]}/>
+            <Sel value={fZona}  onChange={setFZona}  opts={["Tutte",...ZONE]}/>
             <Sel value={fFonte} onChange={setFFonte} opts={["Tutte",...SOURCES]}/>
-            <Sel value={fCond} onChange={setFCond} opts={["Tutte",...Object.keys(COND)]}/>
-            <Sel value={fSort} onChange={setFSort} opts={[
+            <Sel value={fCond}  onChange={setFCond}  opts={["Tutte",...Object.keys(COND)]}/>
+            <Sel value={fSort}  onChange={setFSort}  opts={[
               {v:"data_desc",l:"Recenti"},{v:"prezzo_asc",l:"Prezzo ↑"},
               {v:"prezzo_desc",l:"Prezzo ↓"},{v:"ppm",l:"€/m² ↑"},
               {v:"voto_desc",l:"Voto ↓"},{v:"mq_desc",l:"m² ↓"},
             ]}/>
             <button onClick={goAdd} style={{...btn,padding:"7px 16px",fontSize:20,lineHeight:1}}>＋</button>
           </div>
+
           {listings.length>0&&(
             <div style={{display:"flex",gap:18,background:"#9B3A17",borderRadius:10,padding:"11px 16px",marginBottom:14,flexWrap:"wrap"}}>
-              <Stat label="Filtrati" val={stats.tot}/>
+              <Stat label="Filtrati"   val={stats.tot}/>
               <Stat label="Prezzo min" val={stats.minP?fmt(stats.minP):"—"}/>
-              <Stat label="Media" val={stats.avgP?fmt(stats.avgP):"—"}/>
+              <Stat label="Media"      val={stats.avgP?fmt(stats.avgP):"—"}/>
               <Stat label="€/m² medio" val={stats.avgPM?`€ ${stats.avgPM.toLocaleString("it-IT")}/m²`:"—"}/>
             </div>
           )}
+
           {listings.length===0?(
             <div style={{textAlign:"center",padding:"56px 20px",fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0"}}>
               <div style={{fontSize:52,marginBottom:12}}>🏠</div>
               <div style={{fontSize:18,fontWeight:700,fontFamily:"Playfair Display,Georgia,serif",color:"#FAF0E6",marginBottom:10}}>Nessun annuncio ancora</div>
-              <p style={{maxWidth:340,margin:"0 auto 20px",lineHeight:1.6,fontSize:14}}>Vai su Ricerche, trova un appartamento e aggiungilo con il link diretto.</p>
+              <p style={{maxWidth:340,margin:"0 auto 20px",lineHeight:1.6,fontSize:14}}>Vai su Ricerche, trova un appartamento e aggiungilo con ＋ Aggiungi.</p>
               <button onClick={goAdd} style={btn}>＋ Aggiungi il primo</button>
             </div>
           ):filtered.length===0?(
@@ -669,17 +490,19 @@ function App(){
           ):(
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:14}}>
               {filtered.map(l=>{
-                const cc=COND[l.condizioni]||"#888";
                 return (
-                  <div key={l._id} style={{background:"#8B3214",borderRadius:12,padding:16,border:"none",display:"flex",flexDirection:"column",gap:9,boxShadow:"0 2px 8px rgba(0,0,0,.2)"}}>
+                  <div key={l._id} style={{background:"#8B3214",borderRadius:12,padding:16,display:"flex",flexDirection:"column",gap:9,boxShadow:"0 2px 8px rgba(0,0,0,.2)"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:6}}>
                       <Badge fonte={l.fonte}/>
-                      <CondBadge cond={l.condizioni}/>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        {l.lat&&<span style={{fontSize:11,color:"#7EC87E"}} title="Geocodificato">📍</span>}
+                        <CondBadge cond={l.condizioni}/>
+                      </div>
                     </div>
                     <div style={{fontSize:14,fontWeight:600,lineHeight:1.4,fontFamily:"Playfair Display,Georgia,serif",color:"#FAF0E6"}}>{l.titolo||<em style={{color:"#E8C9A0",fontWeight:400,opacity:.6}}>Senza titolo</em>}</div>
                     {(l.zona||l.indirizzo)&&(
                       <div style={{fontSize:12,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0"}}>
-                        📍 <b>{l.zona}</b>{l.indirizzo&&<span style={{color:"#E8C9A0",opacity:.7}}> · {l.indirizzo}</span>}
+                        <b>{l.zona}</b>{l.indirizzo&&<span style={{opacity:.7}}> · {l.indirizzo}</span>}
                       </div>
                     )}
                     <div style={{display:"flex",background:"#B5921B",borderRadius:8,overflow:"hidden"}}>
@@ -714,127 +537,47 @@ function App(){
         </div>
       )}
 
+      {/* TAB MAPPA */}
+      {tab==="mappa"&&(
+        listings.length===0?(
+          <div style={{textAlign:"center",padding:"56px 20px",fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0"}}>
+            <div style={{fontSize:52,marginBottom:12}}>🗺</div>
+            <div style={{fontSize:18,fontWeight:700,fontFamily:"Playfair Display,Georgia,serif",color:"#FAF0E6",marginBottom:10}}>Nessun annuncio da mostrare</div>
+            <p style={{maxWidth:340,margin:"0 auto 20px",lineHeight:1.6,fontSize:14}}>Aggiungi un annuncio con un indirizzo e apparirà qui sulla mappa.</p>
+            <button onClick={goAdd} style={btn}>＋ Aggiungi il primo</button>
+          </div>
+        ):(
+          <MapTab listings={listings}/>
+        )
+      )}
+
       {/* TAB AGGIUNGI */}
       {tab==="aggiungi"&&(
         <div style={{padding:"20px 16px 60px",maxWidth:680,margin:"0 auto"}}>
-
-          {/* ── SEZIONE IMPORTA DA EMAIL (solo in modalità "nuovo", non in modifica) ── */}
-          {editId===null&&(
-            <div style={{background:"#8B3214",borderRadius:12,padding:22,marginBottom:18}}>
-              <h2 style={{fontSize:18,fontWeight:700,fontFamily:"Playfair Display,Georgia,serif",color:"#FAF0E6",margin:"0 0 6px"}}>
-                📧 Importa da email
-              </h2>
-              <p style={{fontSize:13,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",margin:"0 0 14px",lineHeight:1.6}}>
-                Funziona con <b style={{color:"#FAF0E6"}}>Immobiliare.it</b>, <b style={{color:"#FAF0E6"}}>Idealista</b> e <b style={{color:"#FAF0E6"}}>Casa.it</b>. Apri l'email di alert, seleziona tutto (Cmd+A), copia (Cmd+C) e incolla qui sotto.
-              </p>
-              <div style={{position:"relative"}}>
-                <textarea
-                  style={{...fi, height:100, resize:"vertical", fontSize:13, paddingRight: emailText ? 36 : 12}}
-                  placeholder="Incolla qui il testo dell'email…"
-                  value={emailText}
-                  onChange={handleEmailChange}
-                />
-                {emailText&&(
-                  <button
-                    onClick={clearEmail}
-                    style={{position:"absolute",top:8,right:8,background:"rgba(0,0,0,.25)",border:"none",borderRadius:6,color:"#E8C9A0",cursor:"pointer",fontSize:16,lineHeight:1,padding:"2px 6px"}}
-                    title="Svuota">✕</button>
-                )}
-              </div>
-
-              {/* Risultati parsing */}
-              {emailText && parsedItems.length===0&&(
-                <div style={{marginTop:12,fontSize:13,fontFamily:"Courier Prime,Courier New,monospace",color:"#C4967A",padding:"10px 14px",background:"rgba(0,0,0,.2)",borderRadius:8}}>
-                  ⚠️ Nessun annuncio con prezzo rilevato. Assicurati di aver copiato l'intero testo dell'email (non solo una parte).
-                </div>
-              )}
-
-              {parsedItems.length>0&&(
-                <div style={{marginTop:14}}>
-                  <div style={{fontSize:11,letterSpacing:2,textTransform:"uppercase",color:"#E8C9A0",fontFamily:"Courier Prime,Courier New,monospace",marginBottom:10,opacity:.7}}>
-                    {parsedItems.length} {parsedItems.length===1?"annuncio trovato":"annunci trovati"}
-                  </div>
-                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                    {parsedItems.map((item, idx)=>{
-                      const added = addedSet.has(idx);
-                      const loading = addingIdx===idx;
-                      return (
-                        <div key={idx} style={{
-                          background: added ? "rgba(22,163,74,.15)" : "rgba(0,0,0,.2)",
-                          borderRadius:8,
-                          padding:"12px 14px",
-                          display:"flex",
-                          alignItems:"center",
-                          gap:12,
-                          border: added ? "1px solid rgba(22,163,74,.4)" : "1px solid rgba(255,255,255,.1)"
-                        }}>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:13,fontWeight:700,fontFamily:"Playfair Display,Georgia,serif",color:"#FAF0E6",marginBottom:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                              {item.titolo}
-                            </div>
-                            <div style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",display:"flex",gap:10,flexWrap:"wrap"}}>
-                              {item.indirizzo
-                                ? <span>📍 {item.indirizzo}</span>
-                                : <span>📍 {item.zonaRaw}</span>}
-                              {item.prezzo&&<span style={{color:"#B5921B",fontWeight:700}}>{fmt(item.prezzo)}</span>}
-                              {item.dimensione&&<span>{item.dimensione} m²</span>}
-                              {item.vani&&<span>{item.vani} locali</span>}
-                            </div>
-                            {added&&<div style={{fontSize:10,fontFamily:"Courier Prime,Courier New,monospace",color:"#7EC87E",marginTop:2}}>
-                              ✓ Salvato · <a href={item.link} target="_blank" rel="noopener" style={{color:"#B5921B"}}>Cerca su {item.fonte} →</a> poi copia il link e aggiungilo da ✏️
-                            </div>}
-                          </div>
-                          <button
-                            disabled={added||loading}
-                            onClick={()=>addParsedItem(item, idx)}
-                            style={{
-                              ...btn,
-                              padding:"8px 14px",
-                              fontSize:13,
-                              background: added ? "#16a34a" : loading ? "#9B3A17" : "#B5921B",
-                              minWidth:90,
-                              flexShrink:0,
-                              opacity: (added||loading) ? .85 : 1
-                            }}>
-                            {loading ? "⏳" : added ? "✓ Aggiunto" : "＋ Aggiungi"}
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Divisore */}
-          {editId===null&&(
-            <div style={{display:"flex",alignItems:"center",gap:12,margin:"6px 0 18px"}}>
-              <div style={{flex:1,height:1,background:"rgba(255,255,255,.2)"}}/>
-              <span style={{fontSize:11,fontFamily:"Courier Prime,Courier New,monospace",color:"#C4967A",opacity:.7,whiteSpace:"nowrap"}}>— oppure inserisci manualmente —</span>
-              <div style={{flex:1,height:1,background:"rgba(255,255,255,.2)"}}/>
-            </div>
-          )}
-
-          {/* ── FORM MANUALE ── */}
-          <div style={{background:"#8B3214",borderRadius:12,padding:22,border:"none"}}>
+          <div style={{background:"#8B3214",borderRadius:12,padding:22}}>
             <h2 style={{fontSize:20,fontWeight:700,fontFamily:"Playfair Display,Georgia,serif",color:"#FAF0E6",margin:"0 0 4px"}}>{editId!==null?"✏️ Modifica":"＋ Nuovo annuncio"}</h2>
-            <p style={{fontSize:13,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",margin:"0 0 20px",lineHeight:1.6}}>Incolla il link dell'annuncio. Gli altri campi sono facoltativi.</p>
+            <p style={{fontSize:13,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0",margin:"0 0 20px",lineHeight:1.6}}>
+              Incolla il <b>titolo dell'annuncio</b> nel campo qui sotto — l'indirizzo si compila da solo e l'annuncio apparirà sulla mappa dopo il salvataggio.
+            </p>
+
+            {/* Banner indirizzo auto-compilato */}
+            {form.indirizzo && (
+              <div style={{background:"rgba(181,146,27,.2)",border:"1px solid #B5921B",borderRadius:8,padding:"8px 14px",marginBottom:16,fontSize:13,fontFamily:"Courier Prime,Courier New,monospace",color:"#E8C9A0"}}>
+                📍 Indirizzo rilevato: <b style={{color:"#FAF0E6"}}>{form.indirizzo}</b>
+                <span style={{opacity:.6,fontSize:11,marginLeft:6}}>(puoi modificarlo sotto)</span>
+              </div>
+            )}
+
             <div className="fg" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"14px 16px"}}>
+              <FRow label="Titolo dell'annuncio (incolla dal sito)" span={2}>
+                <input style={fi}
+                  placeholder='es. "Bilocale in vendita in Piazzale Susa, 7"'
+                  value={form.titolo}
+                  onChange={e => onTitoloChange(e.target.value)}
+                />
+              </FRow>
               <FRow label="🔗 Link annuncio" span={2}>
                 <input style={fi} placeholder="https://www.immobiliare.it/annunci/12345678/" value={form.link} onChange={e=>setForm(f=>({...f,link:e.target.value}))}/>
-              </FRow>
-              <FRow label="Titolo">
-                <input style={fi} placeholder="es. Trilocale con terrazzo" value={form.titolo} onChange={e=>{
-                  const titolo = e.target.value;
-                  const street = streetFromTitle(titolo);
-                  setForm(f=>({
-                    ...f,
-                    titolo,
-                    // Compila indirizzo solo se era vuoto o era stato estratto automaticamente
-                    indirizzo: f.indirizzo && f.indirizzo !== streetFromTitle(f.titolo) ? f.indirizzo : street,
-                  }));
-                }}/>
               </FRow>
               <FRow label="Fonte">
                 <select style={fi} value={form.fonte} onChange={e=>setForm(f=>({...f,fonte:e.target.value}))}>
@@ -847,12 +590,12 @@ function App(){
                   {ZONE.map(z=><option key={z}>{z}</option>)}
                 </select>
               </FRow>
-              <FRow label={
-                form.indirizzo && form.indirizzo === streetFromTitle(form.titolo)
-                  ? "Indirizzo ✦ estratto dal titolo"
-                  : "Indirizzo"
-              }>
-                <input style={fi} placeholder="Via Roma 12" value={form.indirizzo} onChange={e=>setForm(f=>({...f,indirizzo:e.target.value}))}/>
+              <FRow label="Indirizzo (per la mappa)" span={2}>
+                <input style={fi}
+                  placeholder="Via Roma 12  (auto-compilato dal titolo)"
+                  value={form.indirizzo}
+                  onChange={e=>setForm(f=>({...f,indirizzo:e.target.value,lat:null,lng:null}))}
+                />
               </FRow>
               <FRow label="Prezzo (€)">
                 <input style={fi} type="number" inputMode="numeric" placeholder="380000" value={form.prezzo} onChange={e=>setForm(f=>({...f,prezzo:e.target.value}))}/>
@@ -895,9 +638,9 @@ function App(){
               </FRow>
             </div>
             <div style={{display:"flex",gap:10,marginTop:22,flexWrap:"wrap"}}>
-              <button onClick={saveForm} disabled={saving}
-                style={{...btn,background:saving?"#9B3A17":"#B5921B",padding:"14px 28px",fontSize:16,borderRadius:10}}>
-                {saving?"⏳ Salvataggio…": editId!==null?"💾 Salva modifiche":"✅ Aggiungi annuncio"}
+              <button onClick={saveForm} disabled={saving||geocoding}
+                style={{...btn,background:(saving||geocoding)?"#9B3A17":"#B5921B",padding:"14px 28px",fontSize:16,borderRadius:10}}>
+                {geocoding?"📍 Geocodifica in corso…":saving?"⏳ Salvataggio…":editId!==null?"💾 Salva modifiche":"✅ Aggiungi e vai alla mappa"}
               </button>
               <button onClick={()=>{setForm(EMPTY);setEditId(null);setTab("annunci");}} style={{...btn,background:"#9B3A17"}}>Annulla</button>
             </div>
@@ -919,7 +662,6 @@ function App(){
           </div>
         </div>
       )}
-
       <div style={{height:32}}/>
     </div>
   );
