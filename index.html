@@ -368,11 +368,16 @@ function IGScraperTab({onSaveToAnnunci}) {
     setSaved(prev => ({...prev, [key]: true}));
   };
 
+  const discardManual = (key) => {
+    setDiscarded(prev => ({...prev, [key]: analyzed[key] || {titolo:"Scartato manualmente"}}));
+    setAnalyzed(prev => { const n={...prev}; delete n[key]; return n; });
+  };
+
   const passedPosts = posts.filter(p => analyzed[p.id||p.url]);
   const pendingCount = posts.filter(p => !analyzed[p.id||p.url] && !discarded[p.id||p.url]).length;
   const discardedCount = Object.keys(discarded).length;
 
-  const Card = ({post, info, isSaved, dim}) => (
+  const Card = ({post, info, isSaved, dim, onDiscard}) => (
     <div style={{background: dim?"#6B2810":"#8B3214", borderRadius:12, overflow:"hidden", boxShadow:"0 2px 8px rgba(0,0,0,.25)", display:"flex", flexDirection:"column", opacity: dim?.7:1}}>
       {post.displayUrl && (
         <div style={{height:140, overflow:"hidden", flexShrink:0}}>
@@ -399,7 +404,12 @@ function IGScraperTab({onSaveToAnnunci}) {
         </div>
         <div style={{display:"flex", gap:8, marginTop:"auto", paddingTop:8, borderTop:"1px solid rgba(255,255,255,.15)", alignItems:"center"}}>
           <a href={post.url} target="_blank" rel="noopener noreferrer" style={{fontSize:12, color:"#E8C9A0", textDecoration:"none", fontWeight:700, flex:1}}>IG →</a>
-          {!dim && !isSaved && <button onClick={()=>salva(post, info)} style={{...btn, padding:"5px 12px", fontSize:11}}>＋ Salva</button>}
+          {!dim && !isSaved && (
+            <>
+              <button onClick={()=>salva(post, info)} style={{...btn, padding:"5px 12px", fontSize:11}}>＋ Salva</button>
+              {onDiscard && <button onClick={()=>onDiscard(post.id||post.url)} style={{...btn, background:"#7f1d1d", padding:"5px 12px", fontSize:11}}>✕ Scarta</button>}
+            </>
+          )}
           {isSaved && <span style={{fontSize:11, color:"#7EC87E", fontWeight:700}}>✓ Salvato</span>}
         </div>
       </div>
@@ -456,7 +466,7 @@ function IGScraperTab({onSaveToAnnunci}) {
             <>
               <div style={{fontSize:12, fontWeight:700, color:"#7EC87E", marginBottom:10, textTransform:"uppercase", letterSpacing:1}}>✅ {passedPosts.length} annunci in target</div>
               <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:12, marginBottom:20}}>
-                {passedPosts.map(p => <Card key={p.id||p.url} post={p} info={analyzed[p.id||p.url]} isSaved={saved[p.id||p.url]} dim={false}/>)}
+                {passedPosts.map(p => <Card key={p.id||p.url} post={p} info={analyzed[p.id||p.url]} isSaved={saved[p.id||p.url]} dim={false} onDiscard={discardManual}/>)}
               </div>
             </>
           )}
