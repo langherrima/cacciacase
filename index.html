@@ -151,12 +151,32 @@ function MapView({listings}){
     }
     markersRef.current.forEach(m=>m.remove());
     markersRef.current=[];
+    // Conta quante volte appare ogni coordinata per gestire sovrapposizioni
+    const coordCount = {};
+    const coordIdx = {};
     listings.forEach(l=>{
       if(!l.lat||!l.lng) return;
+      const key = l.lat.toFixed(5)+","+l.lng.toFixed(5);
+      coordCount[key] = (coordCount[key]||0)+1;
+      coordIdx[key] = 0;
+    });
+    listings.forEach(l=>{
+      if(!l.lat||!l.lng) return;
+      const key = l.lat.toFixed(5)+","+l.lng.toFixed(5);
+      // Se ci sono più marker sulla stessa posizione, offset circolare
+      let lat = l.lat, lng = l.lng;
+      if(coordCount[key]>1){
+        const idx = coordIdx[key];
+        coordIdx[key]++;
+        const angle = (2*Math.PI/coordCount[key])*idx;
+        const offset = 0.00015; // ~15 metri
+        lat = l.lat + offset*Math.cos(angle);
+        lng = l.lng + offset*Math.sin(angle);
+      }
       const color=condColor[l.condizioni]||"#888";
       const stars="★".repeat(l.voto||0)+"☆".repeat(5-(l.voto||0));
       const popup=`<div style="min-width:180px;font-family:Courier Prime,monospace"><div style="font-family:Playfair Display,serif;font-size:14px;font-weight:700;color:#2C1206;margin-bottom:4px">${l.titolo||"Annuncio"}</div><div style="font-size:12px;color:#7A4A2E;margin-bottom:7px">📍 ${l.zona||""}${l.indirizzo?" · "+l.indirizzo:""}</div><div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap"><span style="background:#B5451B;color:#fff;font-size:11px;padding:2px 8px;border-radius:4px;font-weight:700">${l.prezzo?`€ ${Number(l.prezzo).toLocaleString("it-IT")}`:""}</span><span style="background:#B5451B;color:#fff;font-size:11px;padding:2px 8px;border-radius:4px;font-weight:700">${l.dimensione?l.dimensione+" m²":""}</span></div><div style="font-size:15px;color:${color};margin-bottom:5px">${stars}</div>${l.link?`<a href="${l.link}" target="_blank" style="font-size:12px;color:#B5451B;font-weight:700">Vedi annuncio →</a>`:""}</div>`;
-      const marker=L.marker([l.lat,l.lng],{icon:makeIcon(color)}).bindPopup(popup).addTo(instanceRef.current);
+      const marker=L.marker([lat,lng],{icon:makeIcon(color)}).bindPopup(popup).addTo(instanceRef.current);
       markersRef.current.push(marker);
     });
   },[listings]);
@@ -496,34 +516,12 @@ function App(){
   },[dbReady]);
 
   const geocode = async (indirizzo, zona) => {
-    // Tentativo 1: indirizzo completo + zona
-    const q1 = `${indirizzo||""} ${zona||""} Milano, Italy`.trim();
+    const q = `${indirizzo||""} ${zona||""} Milano, Italy`.trim();
     try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q1)}&limit=1`);
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`);
       const data = await res.json();
       if(data.length) return {lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon)};
     } catch(e){}
-    // Tentativo 2: indirizzo senza numero civico
-    if(indirizzo) {
-      const senzaCivico = indirizzo.replace(/\s+\d+[a-zA-Z]?$/, '').trim();
-      if(senzaCivico && senzaCivico !== indirizzo) {
-        const q2 = `${senzaCivico} Milano, Italy`;
-        try {
-          const res2 = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q2)}&limit=1`);
-          const data2 = await res2.json();
-          if(data2.length) return {lat: parseFloat(data2[0].lat), lng: parseFloat(data2[0].lon)};
-        } catch(e){}
-      }
-    }
-    // Tentativo 3: solo zona
-    if(zona) {
-      const q3 = `${zona} Milano, Italy`;
-      try {
-        const res3 = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q3)}&limit=1`);
-        const data3 = await res3.json();
-        if(data3.length) return {lat: parseFloat(data3[0].lat), lng: parseFloat(data3[0].lon)};
-      } catch(e){}
-    }
     return null;
   };
 
