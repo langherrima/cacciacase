@@ -156,20 +156,20 @@ function MapView({listings}){
     const coordIdx = {};
     listings.forEach(l=>{
       if(!l.lat||!l.lng) return;
-      const key = l.lat.toFixed(5)+","+l.lng.toFixed(5);
+      const key = l.lat.toFixed(3)+","+l.lng.toFixed(3);
       coordCount[key] = (coordCount[key]||0)+1;
       coordIdx[key] = 0;
     });
     listings.forEach(l=>{
       if(!l.lat||!l.lng) return;
-      const key = l.lat.toFixed(5)+","+l.lng.toFixed(5);
+      const key = l.lat.toFixed(3)+","+l.lng.toFixed(3);
       // Se ci sono più marker sulla stessa posizione, offset circolare
       let lat = l.lat, lng = l.lng;
       if(coordCount[key]>1){
         const idx = coordIdx[key];
         coordIdx[key]++;
         const angle = (2*Math.PI/coordCount[key])*idx;
-        const offset = 0.00015; // ~15 metri
+        const offset = 0.00045; // ~50 metri
         lat = l.lat + offset*Math.cos(angle);
         lng = l.lng + offset*Math.sin(angle);
       }
