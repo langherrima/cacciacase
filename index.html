@@ -135,10 +135,13 @@ const fi = {border:"1px solid rgba(44,18,6,.2)",borderRadius:7,padding:"10px 12p
 const btn = {background:"#B5451B",color:"#fff",border:"none",borderRadius:8,padding:"10px 18px",fontSize:14,fontWeight:700,fontFamily:"Courier Prime,Courier New,monospace",cursor:"pointer"};
 
 // ── MAP ──────────────────────────────────────────────────────────────
-function MapView({listings}){
+function MapView({listings, onGeocodeTutti}){
   const mapRef = React.useRef(null);
   const instanceRef = React.useRef(null);
   const markersRef = React.useRef([]);
+  const [geocoding, setGeocoding] = React.useState(false);
+  const [geoProgress, setGeoProgress] = React.useState(0);
+  const [geoTotal, setGeoTotal] = React.useState(0);
   const condColor = {"Ottimo":"#16a34a","Buono":"#B5451B","Da ristrutturare":"#dc2626"};
   function makeIcon(color){
     return L.divIcon({className:"",html:`<div style="width:26px;height:26px;background:${color};border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;font-size:11px">🏠</div>`,iconSize:[26,26],iconAnchor:[13,13],popupAnchor:[0,-16]});
@@ -183,9 +186,17 @@ function MapView({listings}){
   const withLocation = listings.filter(l=>l.lat&&l.lng).length;
   return (
     <div style={{borderRadius:12,overflow:"hidden",boxShadow:"0 2px 12px rgba(44,18,6,.12)",border:"1px solid rgba(44,18,6,.1)"}}>
-      <div style={{background:"#8B3214",padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div style={{fontFamily:"Playfair Display,Georgia,serif",fontSize:16,fontWeight:700,color:"#FAF0E6"}}>Mappa annunci · Milano</div>
-        <div style={{fontSize:12,fontFamily:"Courier Prime,Courier New,monospace",color:"#F5DEC8"}}>{withLocation} annunci posizionati</div>
+      <div style={{background:"#8B3214",padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+        <div>
+          <div style={{fontFamily:"Playfair Display,Georgia,serif",fontSize:16,fontWeight:700,color:"#FAF0E6"}}>Mappa annunci · Milano</div>
+          <div style={{fontSize:12,fontFamily:"Courier Prime,Courier New,monospace",color:"#F5DEC8"}}>{withLocation} di {listings.length} posizionati</div>
+        </div>
+        {listings.filter(l=>!l.lat&&(l.indirizzo||l.zona)).length>0&&(
+          <button onClick={()=>onGeocodeTutti(setGeocoding,setGeoProgress,setGeoTotal)} disabled={geocoding}
+            style={{background:"#B5921B",color:"#fff",border:"none",borderRadius:7,padding:"7px 12px",fontSize:12,fontWeight:700,fontFamily:"Courier Prime,Courier New,monospace",cursor:geocoding?"not-allowed":"pointer",opacity:geocoding?0.7:1}}>
+            {geocoding ? ("📍 "+geoProgress+"/"+geoTotal+"…") : ("📍 Geocodifica tutti ("+listings.filter(l=>!l.lat&&(l.indirizzo||l.zona)).length+")")}
+          </button>
+        )}
       </div>
       <div ref={mapRef} style={{height:420,width:"100%"}}/>
       <div style={{background:"#FDF0E4",padding:"12px 16px",display:"flex",gap:20,flexWrap:"wrap",alignItems:"center",borderTop:"1px solid rgba(44,18,6,.08)"}}>
@@ -516,13 +527,39 @@ function App(){
   },[dbReady]);
 
   const geocode = async (indirizzo, zona) => {
-    const q = `${indirizzo||""} ${zona||""} Milano, Italy`.trim();
-    try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`);
-      const data = await res.json();
-      if(data.length) return {lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon)};
-    } catch(e){}
+    const tries = [];
+    if(indirizzo) tries.push(`${indirizzo} Milano, Italy`);
+    if(indirizzo) tries.push(`${indirizzo.replace(/\s+\d+[a-zA-Z]?$/, '').trim()} Milano, Italy`);
+    if(zona) tries.push(`${zona} Milano, Italy`);
+    for(const q of tries){
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`);
+        const data = await res.json();
+        if(data.length) return {lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon)};
+      } catch(e){}
+      await new Promise(r=>setTimeout(r,300));
+    }
     return null;
+  };
+
+  const handleGeocodeTutti = (setGeocoding, setGeoProgress, setGeoTotal) => {
+    const senza = listings.filter(l => !l.lat && (l.indirizzo || l.zona));
+    if(!senza.length) return;
+    setGeocoding(true);
+    setGeoTotal(senza.length);
+    setGeoProgress(0);
+    let i = 0;
+    function next(){
+      if(i >= senza.length){ setGeocoding(false); return; }
+      const l = senza[i];
+      geocode(l.indirizzo, l.zona).then(coords => {
+        if(coords){
+          const data = Object.assign({}, l, {lat: coords.lat, lng: coords.lng});
+          window.__db.update(l._id, data).then(()=>{ setGeoProgress(i+1); i++; setTimeout(next, 1200); });
+        } else { setGeoProgress(i+1); i++; setTimeout(next, 1200); }
+      });
+    }
+    next();
   };
 
   const saveForm = async (dataOverride=null)=>{
@@ -689,7 +726,7 @@ function App(){
       {/* TAB MAPPA */}
       {tab==="mappa"&&(
         <div style={{padding:"16px 16px 40px",maxWidth:760,margin:"0 auto"}}>
-          <MapView listings={listings}/>
+          <MapView listings={listings} onGeocodeTutti={handleGeocodeTutti}/>
         </div>
       )}
 
